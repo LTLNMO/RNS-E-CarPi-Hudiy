@@ -1,0 +1,18 @@
+[Unit]
+Description=DIS Top Display Rendering
+Requires=can_handler.service
+After=can_handler.service
+BindsTo=can_handler.service
+
+[Service]
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/python3 /home/pi/dis_client/dis_top_display.py
+WorkingDirectory=/home/pi/dis_client
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=10
+User=pi
+Group=input
+
+[Install]
+WantedBy=multi-user.target
