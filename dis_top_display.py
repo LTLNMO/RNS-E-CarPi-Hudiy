@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-v.2
+v.2.1
 DIS top display — socketcan, hudiy_data-compatible.
 
 Priority:
@@ -48,8 +48,8 @@ try:
 except Exception:
     sys.exit("ERROR: icons.py not found or failed to import.")
 
-_TRANS = bytes(audscii_trans[i] if i < len(audscii_trans) else 0x20 for i in range(256))
-_BLANK = audscii_trans[ord(" ")]
+_TRANS = bytes(audscii_trans[i] if i < len(audscii_trans) else 0x1C for i in range(256))
+_BLANK = 0x1C  # matches OEM blank byte
 
 MIN_SLAM = 4
 MAX_SLAM_SHORT = 8
@@ -327,9 +327,9 @@ class LineController:
 
     def _build_stream(self, text: str):
         if self._stype == "marquee":
-            gap = bytes([0x65] * (self._mgap + 1))
+            gap = bytes([_BLANK] * (self._mgap + 1))
             txt = bytes(
-                0x65 if c == " " else audscii_trans[ord(c) & 0xFF] & 0xFF
+                _BLANK if c == " " else audscii_trans[ord(c) & 0xFF] & 0xFF
                 for c in text
             )
             self._stream = (txt + gap) if text else gap
