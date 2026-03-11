@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-v.2.1
+v.3
 DIS top display — socketcan, hudiy_data-compatible.
 
 Priority:
@@ -70,6 +70,8 @@ CAN_FAIL_WARN = 5
 HB_INTERVAL = 0.3
 HB_WINDOW = 5.0
 SENT_TTL = 2.0
+SENT_CACHE_MAX = 64
+SENT_PRUNE_INTERVAL = 10.0
 OEM_COOLDOWN = 0.05
 OEM_RESTART_GAP = 2.0
 OEM_RESPONSE = 5
@@ -141,6 +143,7 @@ class LineController:
 
         self._sent_cache = {}
         self._cache_lock = threading.Lock()
+        self._last_prune = now
         self._fail_count = 0
 
         self._oem_t = []
@@ -255,7 +258,9 @@ class LineController:
                     count = self._slam_count
 
                 for _ in range(count):
-                    if not self._send(msg, now):
+                    # Capture time per-send so sent_cache timestamps are accurate
+                    send_t = time.monotonic()
+                    if not self._send(msg, send_t):
                         break
                     time.sleep(SLAM_GAP)
 
@@ -289,30 +294,32 @@ class LineController:
                     with self._tail_lock:
                         self._tail_times = [done + dt for dt in sched]
 
+            # Single time.monotonic() call covers tail, due, and hb checks
+            now = time.monotonic()
+
             due.clear()
             if tv:
                 with self._tail_lock:
                     if self._tail_times:
-                        now = time.monotonic()
                         remaining = []
                         for t in self._tail_times:
                             (due if now >= t else remaining).append(t)
                         self._tail_times = remaining
 
             if due:
-                now = time.monotonic()
                 snap = self.snapshot()
                 msg = can.Message(arbitration_id=self.can_id, data=snap, is_extended_id=False)
+                send_t = time.monotonic()
                 for _ in due:
-                    self._send(msg, now)
-                self.last_send_t = now
+                    self._send(msg, send_t)
+                self.last_send_t = send_t
 
-            now = time.monotonic()
             if tv and (now - self.last_oem_t) < HB_WINDOW and now >= next_hb:
                 snap = self.snapshot()
                 msg = can.Message(arbitration_id=self.can_id, data=snap, is_extended_id=False)
-                self._send(msg, now)
-                self.last_send_t = now
+                send_t = time.monotonic()
+                self._send(msg, send_t)
+                self.last_send_t = send_t
                 next_hb = now + HB_INTERVAL
 
     def _reset(self, text: str):
@@ -363,7 +370,13 @@ class LineController:
             left = pad // 2
             self._cur = bytes([_BLANK] * left) + txt + bytes([_BLANK] * (pad - left))
         elif self._stype == "marquee":
-            self._cur = bytes(self._stream[(self._pos + i) % self._stream_len] for i in range(self.W))
+            # Avoid per-byte modulo: use slice with doubled stream for wrap
+            pos = self._pos
+            sl = self._stream_len
+            if pos + self.W <= sl:
+                self._cur = self._stream[pos:pos + self.W]
+            else:
+                self._cur = (self._stream + self._stream)[pos:pos + self.W]
         else:
             w = self._raw[self._pos:self._pos + self.W]
             txt = bytes(_TRANS[ord(c) & 0xFF] for c in w)
@@ -372,9 +385,11 @@ class LineController:
     def _reg_sent(self, payload: bytes, now: float):
         with self._cache_lock:
             self._sent_cache[payload] = now
-            if len(self._sent_cache) > 64:
+            # Prune on timer and on overflow, not just overflow
+            if now - self._last_prune >= SENT_PRUNE_INTERVAL or len(self._sent_cache) > SENT_CACHE_MAX:
                 cutoff = now - SENT_TTL
                 self._sent_cache = {k: v for k, v in self._sent_cache.items() if v >= cutoff}
+                self._last_prune = now
 
     def _send(self, msg: can.Message, now: float) -> bool:
         try:
@@ -391,11 +406,13 @@ class LineController:
 
 
 class CANWatcher:
-    def __init__(self, rx_bus, tx_bus, tx_lock, id_source, id_line1, id_line2, ctrl_l1, ctrl_l2, dis_ctrl, tv_byte=0x37):
+    def __init__(self, rx_bus, tx_bus, tx_lock, id_source, id_line1, id_line2,
+                 ctrl_l1, ctrl_l2, dis_ctrl, tv_byte=0x37, id_tv_presence=0x602):
         self._rx = rx_bus
         self._tx = tx_bus
         self._txlock = tx_lock
         self._id_src = id_source
+        self._id_tv_presence = id_tv_presence
         self._lines = {k: v for k, v in {id_line1: ctrl_l1, id_line2: ctrl_l2}.items() if v}
         self._dis = dis_ctrl
         self.TV_BYTE = tv_byte
@@ -431,6 +448,11 @@ class CANWatcher:
                         for ctrl in self._lines.values():
                             ctrl.restart()
                             ctrl.reset_adaptive()
+
+                elif self.tv_active and cid == self._id_tv_presence:
+                    logger.debug("tv_presence (0x%X) seen — re-asserting display lines", cid)
+                    for ctrl in self._lines.values():
+                        ctrl.trigger_slam(ctrl.snapshot())
 
                 elif self.tv_active and cid in self._lines:
                     ctrl = self._lines[cid]
@@ -500,6 +522,7 @@ class DISController:
         id_l1 = _hex(can_ids.get("fis_line1", "0x363"), 0x363)
         id_l2 = _hex(can_ids.get("fis_line2", "0x365"), 0x365)
         id_src = _hex(can_ids.get("source", "0x661"), 0x661)
+        id_tv_presence = _hex(can_ids.get("tv_presence", "0x602"), 0x602)
 
         iface = can_cfg.get("infotainment", "can0")
         rx_bus = can.Bus(interface="socketcan", channel=iface, receive_own_messages=False)
@@ -543,7 +566,8 @@ class DISController:
 
         self._watcher = CANWatcher(
             rx_bus, tx_bus, tx_lock, id_src, id_l1, id_l2,
-            self._ctrl_l1, self._ctrl_l2, self, tv_byte=tv_byte
+            self._ctrl_l1, self._ctrl_l2, self,
+            tv_byte=tv_byte, id_tv_presence=id_tv_presence
         )
         for c in self._ctrls:
             c._watcher = self._watcher
@@ -658,10 +682,14 @@ class DISController:
         pending_src = 0
         err_count = 0
 
+        # Use a poller so we block efficiently instead of busy-polling with NOBLOCK
+        poller = zmq.Poller()
+        poller.register(self._sub, zmq.POLLIN)
+
         while self.running:
             now = time.monotonic()
 
-            if pending and now >= deadline:
+            if pending is not None and now >= deadline:
                 l1, l2 = pending
                 if self._media_active:
                     if not l1:
@@ -687,6 +715,22 @@ class DISController:
                 self._no_media_pushed = True
                 logger.info("No Media")
 
+            # Block until message arrives or deadline — whichever is sooner
+            if deadline is not None:
+                wait_ms = max(0, int((deadline - now) * 1000))
+            else:
+                wait_ms = 50
+
+            try:
+                socks = dict(poller.poll(wait_ms))
+            except Exception as e:
+                logger.warning("Poller: %s", e)
+                time.sleep(0.05)
+                continue
+
+            if self._sub not in socks:
+                continue
+
             try:
                 parts = self._sub.recv_multipart(flags=zmq.NOBLOCK)
                 if len(parts) < 2:
@@ -711,7 +755,7 @@ class DISController:
                             pending_src = src
                             deadline = now + db
                     else:
-                        if self._media_active or pending:
+                        if self._media_active or pending is not None:
                             logger.info("MEDIA NONE — no source")
                         self._media_active = False
                         self._media_last_t = now
@@ -737,7 +781,7 @@ class DISController:
                         self._push(*self._phone_fields(data))
                     elif was:
                         logger.info("Call ended — restoring display")
-                        if pending:
+                        if pending is not None:
                             self._media_texts = pending
                             self._last_good_texts = pending
                             pending = None
@@ -746,14 +790,15 @@ class DISController:
                         self._resolve()
 
             except zmq.Again:
-                _now = time.monotonic()
-                sleep = max(0.0, min(0.05, deadline - _now)) if deadline else 0.05
-                time.sleep(sleep)
+                pass
             except Exception as e:
                 logger.warning("ZMQ: %s", e)
                 err_count += 1
                 if err_count >= 3:
                     self._reconnect_zmq()
+                    # Re-register new socket with poller
+                    poller.unregister(self._sub)
+                    poller.register(self._sub, zmq.POLLIN)
                     err_count = 0
                 else:
                     time.sleep(0.05)
