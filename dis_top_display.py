@@ -1,89 +1,86 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-v.3
-DIS top display — socketcan, hudiy_data-compatible.
+DIS top display — pure ZMQ rx+tx via can_handler, fixed-interval write.
 
-Priority:
-    Phone call > Media > No Media
+Priority: Phone > Media > No Media
 
-Config path:
-    features.fis_display
+Write strategy:
+    Heartbeat at HB_INTERVAL (100ms) maintains display ownership.
+    Scroll advances write immediately on each tick.
+    CANWatcher responds to OEM writes with OEM_RESPONSE_N frames (~2ms).
+    OEM cadence ~800ms; 100ms HB covers it 8x with no display flicker.
 
-Media line mode keys:
-    title, artist, album, source
-    dash-joined keys supported, e.g. "title-artist"
+CAN I/O:
+    rx — ZMQ SUB on can_raw_stream (can_handler publishes all received frames)
+    tx — ZMQ PUSH to can_handler send_address (dedicated send_worker thread)
+    can_handler uses receive_own_messages=False so our tx frames are not echoed.
 
-Phone line mode keys:
-    caller, state, name, connection, battery, signal
+Config: features.fis_display (enabled, line[12]_mode, phone_line[12]_mode,
+    line[12]_scroll_speed_cps, start/end_delay, line_start_offset,
+    continuous, continuous_gap, continuous_loop_delay,
+    boot_no_media_delay, no_media_line[12]).
 """
 
-import bisect
 import json
 import logging
 import os
-import queue
 import signal
 import sys
 import threading
 import time
 
-import can
 import zmq
 
 CONFIG_PATH = "/home/pi/config.json"
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] (DIS) %(message)s",
+    format="%(asctime)s [%(levelname)s] (DIS) %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-_fh = logging.FileHandler("/tmp/dis_top.log")
-_fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] (DIS) %(message)s"))
-logger.addHandler(_fh)
 
 try:
     from icons import audscii_trans
 except Exception:
     sys.exit("ERROR: icons.py not found or failed to import.")
 
-_TRANS = bytes(audscii_trans[i] if i < len(audscii_trans) else 0x1C for i in range(256))
-_BLANK = 0x1C  # matches OEM blank byte
+try:
+    from unidecode import unidecode as _unidecode
+except ImportError:
+    _unidecode = None
 
-MIN_SLAM = 4
-MAX_SLAM_SHORT = 8
-MAX_SLAM_LONG = 16
-SLAM_GAP = 0.003
-RAMP_UP = 3
-RAMP_DOWN = 1
-CALM_TICK = 1.0
-OEM_WINDOW = 3.0
-OEM_MIN_SAMPLES = 3
-TAIL_COVERAGE = 1.5
-MIN_TAIL_COVER = 0.55
-MAX_TAIL_COVER = 2.0
-WATCHDOG_STALE = 2.0
-DEBOUNCE = 0.20
-SOURCE_CHANGE_DEBOUNCE = 1.0
-CAN_FAIL_WARN = 5
-HB_INTERVAL = 0.3
-HB_WINDOW = 5.0
-SENT_TTL = 2.0
-SENT_CACHE_MAX = 64
-SENT_PRUNE_INTERVAL = 10.0
-OEM_COOLDOWN = 0.05
-OEM_RESTART_GAP = 2.0
-OEM_RESPONSE = 5
+
+# --- Timing ---
+HB_INTERVAL       = 0.100   # heartbeat — keeps display asserted at 10 Hz
+
+# --- Metadata ---
+DEBOUNCE          = 0.18
+SKIP_DEBOUNCE     = 0.50
+SKIP_WINDOW       = 2.0
+NO_MEDIA_DEBOUNCE = 0.50
+MEDIA_TIMEOUT     = 8.0
+
+# --- CAN ---
+CAN_FAIL_WARN     = 5
+OEM_RESPONSE_N    = 3      # immediate writes on OEM detection (no burst gap)
+OEM_COOLDOWN      = 0.02   # min seconds between OEM reactive responses per line
 
 CALL_ACTIVE = {"INCOMING", "ALERTING", "ACTIVE"}
 CALL_LABELS = {
     "INCOMING": "Incoming",
     "ALERTING": "Calling",
-    "ACTIVE": "Active",
-    "IDLE": "Idle",
+    "ACTIVE":   "Active",
 }
 
+PRIO_NONE  = 0
+PRIO_MEDIA = 1
+PRIO_PHONE = 2
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _nice():
     try:
@@ -99,303 +96,240 @@ def _hex(val, default):
         if val is None:
             return default
         s = str(val).strip()
-        if not s:
-            return default
-        return int(s, 16)
+        return default if not s else int(s, 16)
     except (ValueError, TypeError):
         return default
 
 
-class LineController:
-    W = 8
+def _float(val, default):
+    try:
+        if val is None:
+            return default
+        s = str(val).strip()
+        return default if not s else float(s)
+    except (ValueError, TypeError):
+        return default
 
-    def __init__(self, can_id, tx_bus, tx_lock, name, speed, pause, stagger, scroll_type, marquee_gap, no_scroll):
-        self.can_id = can_id
-        self._tx_bus = tx_bus
-        self._tx_lock = tx_lock
-        self.name = name
-        self._watcher = None
 
-        self._speed = speed
-        self._pause = pause
-        self._stagger = stagger
-        self._stype = scroll_type
-        self._mgap = max(0, int(marquee_gap))
-        self.no_scroll = no_scroll
+def _int(val, default):
+    try:
+        if val is None:
+            return default
+        s = str(val).strip()
+        return default if not s else int(s)
+    except (ValueError, TypeError):
+        return default
 
-        self._lock = threading.Lock()
-        self._raw = ""
-        self._raw_len = 0
-        self._pos = 0
+
+def _bool(val, default=False):
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    s = str(val).strip().lower()
+    if s in ("1", "true", "yes", "on"):
+        return True
+    if s in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+def _normalize(text: str) -> str:
+    if not text or _unidecode is None or all(ord(c) < 256 for c in text):
+        return text
+    return "".join(c if ord(c) < 256 else _unidecode(c) for c in text)
+
+
+_TRANS = bytes(audscii_trans)
+_BLANK = audscii_trans[ord(" ")]
+_CONT_GAP = 0x65
+
+
+def _encode_text(text: str) -> bytes:
+    return bytes(_TRANS[ord(c)] if ord(c) < 256 else _BLANK for c in text)
+
+
+def _encode_continuous_text(text: str) -> bytes:
+    return bytes(
+        _CONT_GAP if c == " " else (_TRANS[ord(c)] if ord(c) < 256 else _BLANK)
+        for c in text
+    )
+
+
+# ---------------------------------------------------------------------------
+# TextScroller
+# ---------------------------------------------------------------------------
+
+class TextScroller:
+    def __init__(
+        self,
+        width=8,
+        speed_seconds=0.35,
+        start_delay=2.0,
+        end_delay=2.0,
+        stagger=0.0,
+        continuous=False,
+        continuous_gap=3,
+        continuous_loop_delay=False,
+    ):
+        self.width = width
+        self.scroll_speed = float(speed_seconds)
+        self.start_delay = max(0.0, float(start_delay))
+        self.end_delay = max(0.0, float(end_delay))
+        self.stagger_delay = max(0.0, float(stagger))
+        self.continuous = bool(continuous)
+        self.continuous_gap = max(0, int(continuous_gap))
+        self.continuous_loop_delay = bool(continuous_loop_delay)
+
+        self.lock = threading.Lock()
+        self._reset("")
+
+    def _reset(self, text: str):
+        self.raw_text = text
+        self.raw_len = len(text)
+        self.pos = 0
+        now = time.monotonic()
+        self.last_tick = now - self.scroll_speed
+
+        if self.raw_len > self.width:
+            self.wait_timer = now + self.start_delay + self.stagger_delay
+        else:
+            self.wait_timer = now
+
         self._stream = b""
         self._stream_len = 1
-        self._cur = bytes([_BLANK] * self.W)
+        self._stream_x2 = b""
+        if self.continuous:
+            gap = bytes([_CONT_GAP] * (self.continuous_gap + 1))
+            txt = _encode_continuous_text(text)
+            self._stream = (txt + gap) if text else gap
+            self._stream_len = max(1, len(self._stream))
+            self._stream_x2 = self._stream + self._stream[:self.width]
 
-        now = time.monotonic()
-        self._last_tick = now - speed
-        self._wait_timer = now + pause + stagger
-
-        self._slam_q = queue.Queue()
-        self._tail_lock = threading.Lock()
-        self._tail_times = []
-        self.last_send_t = 0.0
-        self.last_oem_t = 0.0
-
-        self._sent_cache = {}
-        self._cache_lock = threading.Lock()
-        self._last_prune = now
-        self._fail_count = 0
-
-        self._oem_t = []
-        self._oem_lock = threading.Lock()
-        self._slam_lock = threading.Lock()
-        self._slam_count = MIN_SLAM
-        self._calm_t = now
-
-        self._build_stream(self._raw)
         self._recompute()
 
     def set_text(self, text: str) -> bool:
         text = (text or "").strip()
-        with self._lock:
-            if text == self._raw:
+        with self.lock:
+            if text == self.raw_text:
                 return False
             self._reset(text)
             return True
 
-    def snapshot(self) -> bytes:
-        with self._lock:
-            return self._cur
-
-    def snapshot_info(self):
-        with self._lock:
-            return self._cur, (not self.no_scroll) and self._raw_len > self.W
+    def clear(self) -> bool:
+        with self.lock:
+            if not self.raw_text:
+                return False
+            self._reset("")
+            return True
 
     def restart(self):
-        with self._lock:
-            if self.no_scroll or self._raw_len <= self.W:
+        with self.lock:
+            if self.raw_len <= self.width:
                 return
-            self._pos = 0
+            self.pos = 0
             now = time.monotonic()
-            self._last_tick = now - self._speed
-            self._wait_timer = now + self._pause + self._stagger
+            self.last_tick = now - self.scroll_speed
+            self.wait_timer = now + self.start_delay + self.stagger_delay
             self._recompute()
 
-    def trigger_slam(self, payload: bytes):
-        self._slam_q.put((payload, True))
+    def snapshot(self) -> bytes:
+        with self.lock:
+            return self.current_bytes
 
-    def push_text(self):
-        self._slam_q.put((self.snapshot(), True))
-
-    def clear_queue(self):
-        try:
-            while True:
-                self._slam_q.get_nowait()
-        except queue.Empty:
-            pass
-
-    def on_oem_write(self, scrolling: bool):
+    def tick(self):
         now = time.monotonic()
-        self.last_oem_t = now
-        with self._oem_lock:
-            self._oem_t.append(now)
-            idx = bisect.bisect_left(self._oem_t, now - OEM_WINDOW)
-            if idx:
-                del self._oem_t[:idx]
-        ceiling = MAX_SLAM_LONG if scrolling else MAX_SLAM_SHORT
-        with self._slam_lock:
-            self._slam_count = min(self._slam_count + RAMP_UP, ceiling)
-            self._calm_t = now
+        with self.lock:
+            if self.raw_len <= self.width:
+                return None
+            if (now - self.last_tick) <= self.scroll_speed:
+                return None
+            if now < self.wait_timer:
+                return None
 
-    def reset_adaptive(self):
-        with self._oem_lock:
-            self._oem_t.clear()
-        self.last_oem_t = 0.0
-        with self._slam_lock:
-            self._slam_count = MIN_SLAM
-            self._calm_t = time.monotonic()
-
-    def run(self):
-        due = []
-        next_hb = 0.0
-
-        while True:
-            payload = None
-            reset_tails = False
-            try:
-                payload, reset_tails = self._slam_q.get(timeout=0.002)
-                try:
-                    while True:
-                        p, rt = self._slam_q.get_nowait()
-                        payload = p
-                        reset_tails = reset_tails or rt
-                except queue.Empty:
-                    pass
-            except queue.Empty:
-                pass
-
-            now = time.monotonic()
-            tv = self._watcher.tv_active if self._watcher else False
-
-            with self._slam_lock:
-                if now - self._calm_t >= CALM_TICK:
-                    self._calm_t = now
-                    self._slam_count = max(self._slam_count - RAMP_DOWN, MIN_SLAM)
-
-            if tv and not self.no_scroll:
-                advanced, new_bytes = self._tick(now)
-                if advanced:
-                    self._slam_q.put((new_bytes, False))
-
-            if tv and self.last_send_t > 0 and (now - self.last_send_t) >= WATCHDOG_STALE:
-                if payload is None:
-                    payload, reset_tails = self.snapshot(), True
-                    logger.debug("[%s] watchdog re-assert", self.name)
-
-            if payload is not None and tv:
-                msg = can.Message(arbitration_id=self.can_id, data=payload, is_extended_id=False)
-                with self._slam_lock:
-                    count = self._slam_count
-
-                for _ in range(count):
-                    # Capture time per-send so sent_cache timestamps are accurate
-                    send_t = time.monotonic()
-                    if not self._send(msg, send_t):
-                        break
-                    time.sleep(SLAM_GAP)
-
-                done = time.monotonic()
-                self.last_send_t = done
-
-                if reset_tails:
-                    with self._oem_lock:
-                        t = list(self._oem_t)
-
-                    if len(t) < OEM_MIN_SAMPLES:
-                        sched = [0.03, 0.10, 0.25, 0.50]
-                    else:
-                        gaps = [b - a for a, b in zip(t, t[1:])]
-                        interval = sum(gaps) / len(gaps)
-                        if interval < 0.01:
-                            sched = [0.03, 0.10, 0.25, 0.50]
-                        else:
-                            cover = min(max(interval * TAIL_COVERAGE, MIN_TAIL_COVER), MAX_TAIL_COVER)
-                            step = max(interval * 0.4, 0.05)
-                            sched = []
-                            v = step
-                            while v <= cover:
-                                sched.append(round(v, 3))
-                                v += step
-                            if not sched or sched[0] > 0.05:
-                                sched.insert(0, 0.03)
-                            if not sched or sched[-1] < cover * 0.9:
-                                sched.append(round(cover, 3))
-
-                    with self._tail_lock:
-                        self._tail_times = [done + dt for dt in sched]
-
-            # Single time.monotonic() call covers tail, due, and hb checks
-            now = time.monotonic()
-
-            due.clear()
-            if tv:
-                with self._tail_lock:
-                    if self._tail_times:
-                        remaining = []
-                        for t in self._tail_times:
-                            (due if now >= t else remaining).append(t)
-                        self._tail_times = remaining
-
-            if due:
-                snap = self.snapshot()
-                msg = can.Message(arbitration_id=self.can_id, data=snap, is_extended_id=False)
-                send_t = time.monotonic()
-                for _ in due:
-                    self._send(msg, send_t)
-                self.last_send_t = send_t
-
-            if tv and (now - self.last_oem_t) < HB_WINDOW and now >= next_hb:
-                snap = self.snapshot()
-                msg = can.Message(arbitration_id=self.can_id, data=snap, is_extended_id=False)
-                send_t = time.monotonic()
-                self._send(msg, send_t)
-                self.last_send_t = send_t
-                next_hb = now + HB_INTERVAL
-
-    def _reset(self, text: str):
-        self._raw = text
-        self._raw_len = len(text)
-        self._pos = 0
-        now = time.monotonic()
-        self._last_tick = now - self._speed
-        self._wait_timer = now + self._pause + self._stagger
-        self._build_stream(text)
-        self._recompute()
-
-    def _build_stream(self, text: str):
-        if self._stype == "marquee":
-            gap = bytes([_BLANK] * (self._mgap + 1))
-            txt = bytes(
-                _BLANK if c == " " else audscii_trans[ord(c) & 0xFF] & 0xFF
-                for c in text
-            )
-            self._stream = (txt + gap) if text else gap
-            self._stream_len = max(1, len(self._stream))
-
-    def _tick(self, now: float):
-        with self._lock:
-            if (
-                self._raw_len <= self.W
-                or (now - self._last_tick) <= self._speed
-                or now < self._wait_timer
-            ):
-                return False, b""
-
-            if self._stype == "marquee":
-                self._pos = (self._pos + 1) % self._stream_len
+            if self.continuous:
+                self.pos = (self.pos + 1) % self._stream_len
+                self._recompute()
+                if self.pos == 0:
+                    self.wait_timer = now + self.start_delay if self.continuous_loop_delay else now
             else:
-                max_pos = self._raw_len - self.W
-                self._pos = self._pos + 1 if self._pos < max_pos else 0
-                if self._pos == 0 or self._pos == max_pos:
-                    self._wait_timer = now + self._pause
+                max_pos = self.raw_len - self.width
+                self.pos = self.pos + 1 if self.pos < max_pos else 0
+                self._recompute()
+                if self.pos == 0:
+                    self.wait_timer = now + self.start_delay
+                elif self.pos == max_pos:
+                    self.wait_timer = now + self.end_delay
 
-            self._recompute()
-            self._last_tick = now
-            return True, self._cur
+            self.last_tick = now
+            return self.current_bytes
 
     def _recompute(self):
-        if self._raw_len <= self.W:
-            txt = bytes(_TRANS[ord(c) & 0xFF] for c in self._raw)
-            pad = self.W - self._raw_len
+        if self.raw_len <= self.width:
+            txt = _encode_text(self.raw_text)
+            pad = self.width - self.raw_len
             left = pad // 2
-            self._cur = bytes([_BLANK] * left) + txt + bytes([_BLANK] * (pad - left))
-        elif self._stype == "marquee":
-            # Avoid per-byte modulo: use slice with doubled stream for wrap
-            pos = self._pos
-            sl = self._stream_len
-            if pos + self.W <= sl:
-                self._cur = self._stream[pos:pos + self.W]
-            else:
-                self._cur = (self._stream + self._stream)[pos:pos + self.W]
+            self.current_bytes = bytes([_BLANK] * left) + txt + bytes([_BLANK] * (pad - left))
+        elif self.continuous:
+            self.current_bytes = self._stream_x2[self.pos:self.pos + self.width]
         else:
-            w = self._raw[self._pos:self._pos + self.W]
-            txt = bytes(_TRANS[ord(c) & 0xFF] for c in w)
-            self._cur = txt + bytes([_BLANK] * (self.W - len(txt)))
+            window = self.raw_text[self.pos:self.pos + self.width]
+            txt = _encode_text(window)
+            self.current_bytes = txt + bytes([_BLANK] * (self.width - len(txt)))
 
-    def _reg_sent(self, payload: bytes, now: float):
-        with self._cache_lock:
-            self._sent_cache[payload] = now
-            # Prune on timer and on overflow, not just overflow
-            if now - self._last_prune >= SENT_PRUNE_INTERVAL or len(self._sent_cache) > SENT_CACHE_MAX:
-                cutoff = now - SENT_TTL
-                self._sent_cache = {k: v for k, v in self._sent_cache.items() if v >= cutoff}
-                self._last_prune = now
 
-    def _send(self, msg: can.Message, now: float) -> bool:
+# ---------------------------------------------------------------------------
+# LineController
+# ---------------------------------------------------------------------------
+
+class LineController:
+    W = 8
+
+    def __init__(self, can_id, zmq_ctx, can_send_addr, name,
+                 speed_seconds, start_delay, end_delay, stagger,
+                 continuous, continuous_gap, continuous_loop_delay,
+                 no_scroll, watcher=None):
+        self.can_id = can_id
+        self._zmq_ctx = zmq_ctx
+        self._can_send_addr = can_send_addr
+        self.name = name
+        self._watcher = watcher
+        self.no_scroll = no_scroll
+
+        self.scroller = TextScroller(
+            width=self.W,
+            speed_seconds=speed_seconds,
+            start_delay=start_delay,
+            end_delay=end_delay,
+            stagger=stagger,
+            continuous=continuous,
+            continuous_gap=continuous_gap,
+            continuous_loop_delay=continuous_loop_delay,
+        )
+
+        self._fail_count = 0
+        self._next_write = 0.0
+
+    # --- Text control ---
+
+    def set_text(self, text: str) -> bool:
+        return self.scroller.set_text(text)
+
+    def clear(self) -> bool:
+        return self.scroller.clear()
+
+    def snapshot(self) -> bytes:
+        return self.scroller.snapshot()
+
+    def restart(self):
+        if not self.no_scroll:
+            self.scroller.restart()
+
+    # --- Send ---
+
+    def _send(self, data: bytes) -> bool:
         try:
-            with self._tx_lock:
-                self._tx_bus.send(msg)
-            self._reg_sent(bytes(msg.data), now)
+            self._push.send_multipart([str(self.can_id).encode(), data.hex().encode()])
             self._fail_count = 0
             return True
         except Exception:
@@ -404,173 +338,216 @@ class LineController:
                 logger.warning("[%s] %d consecutive CAN send failures", self.name, CAN_FAIL_WARN)
             return False
 
-
-class CANWatcher:
-    def __init__(self, rx_bus, tx_bus, tx_lock, id_source, id_line1, id_line2,
-                 ctrl_l1, ctrl_l2, dis_ctrl, tv_byte=0x37, id_tv_presence=0x602):
-        self._rx = rx_bus
-        self._tx = tx_bus
-        self._txlock = tx_lock
-        self._id_src = id_source
-        self._id_tv_presence = id_tv_presence
-        self._lines = {k: v for k, v in {id_line1: ctrl_l1, id_line2: ctrl_l2}.items() if v}
-        self._dis = dis_ctrl
-        self.TV_BYTE = tv_byte
-        self.tv_active = False
-        self._last_oem = {}
+    # --- Run loop ---
 
     def run(self):
+        self._push = self._zmq_ctx.socket(zmq.PUSH)
+        self._push.setsockopt(zmq.LINGER, 0)
+        self._push.connect(self._can_send_addr)
+        while True:
+            now = time.monotonic()
+            tv = self._watcher is not None and self._watcher.tv_active
+
+            # Write immediately when scroll content changes
+            if tv and not self.no_scroll:
+                new_frame = self.scroller.tick()
+                if new_frame is not None:
+                    self._send(new_frame)
+                    self._next_write = now + HB_INTERVAL
+
+            # Heartbeat — maintain display at low rate
+            if tv and now >= self._next_write:
+                self._send(self.snapshot())
+                self._next_write = now + HB_INTERVAL
+
+            time.sleep(0.005)
+
+
+# ---------------------------------------------------------------------------
+# CANWatcher
+# ---------------------------------------------------------------------------
+
+class CANWatcher:
+    def __init__(self, zmq_ctx, can_sub_addr, can_send_addr,
+                 id_source, dis_ctrl, tv_source_byte):
+        self._zmq_ctx = zmq_ctx
+        self._can_sub_addr = can_sub_addr
+        self._can_send_addr = can_send_addr
+        self._id_src = id_source
+        self._lines = {}  # populated by DISController after construction
+        self._dis = dis_ctrl
+        self.tv_active = False
+        self._tv_source_byte = tv_source_byte
+        self._last_oem: dict = {}
+
+    def _isend(self, cid: int, data: bytes):
+        try:
+            self._push.send_multipart([str(cid).encode(), data.hex().encode()])
+        except Exception as e:
+            logger.debug("CANWatcher isend failed: %s", e)
+
+    def run(self):
+        self._sub = self._zmq_ctx.socket(zmq.SUB)
+        self._sub.connect(self._can_sub_addr)
+        for cid in (self._id_src, *self._lines.keys()):
+            self._sub.subscribe(f"CAN_{cid:03X}".encode())
+
+        self._push = self._zmq_ctx.socket(zmq.PUSH)
+        self._push.setsockopt(zmq.LINGER, 0)
+        self._push.connect(self._can_send_addr)
+
+        poller = zmq.Poller()
+        poller.register(self._sub, zmq.POLLIN)
+
         while True:
             try:
-                msg = self._rx.recv(timeout=0.5)
-                if not msg or msg.is_extended_id:
+                if not poller.poll(500):
                     continue
 
-                cid = msg.arbitration_id
-                data = bytes(msg.data)
+                try:
+                    while True:
+                        parts = self._sub.recv_multipart(flags=zmq.NOBLOCK)
+                        if len(parts) != 2:
+                            continue
 
-                if cid == self._id_src and len(data) >= 4:
-                    was = self.tv_active
-                    self.tv_active = data[3] == self.TV_BYTE
+                        topic = parts[0].decode()
+                        cid = int(topic[4:], 16)   # "CAN_363" -> 0x363
+                        data = bytes.fromhex(json.loads(parts[1])["data_hex"])
 
-                    if self.tv_active and not was:
-                        logger.info("TV source activated")
-                        self._dis._media_last_t = 0.0
-                        for ctrl in self._lines.values():
-                            ctrl.last_send_t = time.monotonic()
-                            ctrl.clear_queue()
-                            with ctrl._tail_lock:
-                                ctrl._tail_times = []
-                            ctrl.push_text()
+                        if cid == self._id_src and len(data) >= 4:
+                            was = self.tv_active
+                            self.tv_active = (data[3] == self._tv_source_byte)
 
-                    elif not self.tv_active and was:
-                        logger.info("TV source deactivated")
-                        for ctrl in self._lines.values():
-                            ctrl.restart()
-                            ctrl.reset_adaptive()
+                            if self.tv_active and not was:
+                                logger.info("TV source activated")
+                                self._dis._no_media_shown = False
+                                for ctrl in self._lines.values():
+                                    if ctrl:
+                                        ctrl.restart()
+                                        ctrl._next_write = 0.0  # write immediately
 
-                elif self.tv_active and cid == self._id_tv_presence:
-                    logger.debug("tv_presence (0x%X) seen — re-asserting display lines", cid)
-                    for ctrl in self._lines.values():
-                        ctrl.trigger_slam(ctrl.snapshot())
+                            elif not self.tv_active and was:
+                                logger.info("TV source deactivated")
+                                self._dis._no_media_shown = False
+                                for ctrl in self._lines.values():
+                                    if ctrl:
+                                        ctrl.restart()
 
-                elif self.tv_active and cid in self._lines:
-                    ctrl = self._lines[cid]
-                    snap, scrolling = ctrl.snapshot_info()
-                    if data == snap:
-                        continue
+                        elif self.tv_active and cid in self._lines:
+                            ctrl = self._lines[cid]
+                            if not ctrl:
+                                continue
 
-                    with ctrl._cache_lock:
-                        ts = ctrl._sent_cache.get(data)
+                            now = time.monotonic()
+                            last = self._last_oem.get(cid, 0.0)
+                            if (now - last) < OEM_COOLDOWN:
+                                continue
+                            self._last_oem[cid] = now
 
-                    now = time.monotonic()
-                    if ts is not None and (now - ts) < SENT_TTL:
-                        logger.debug("[%s] TX echo ignored", ctrl.name)
-                        continue
+                            snap = ctrl.snapshot()
+                            logger.debug("[%s] OEM write — responding", ctrl.name)
+                            for _ in range(OEM_RESPONSE_N):
+                                self._isend(cid, snap)
 
-                    last = self._last_oem.get(cid, 0.0)
-                    if (now - last) > OEM_RESTART_GAP:
-                        ctrl.restart()
-                        snap = ctrl.snapshot()
+                            # Reset periodic write timer so it fires immediately after
+                            ctrl._next_write = 0.0
 
-                    logger.debug("[%s] OEM write rx=%s snap=%s", ctrl.name, data.hex(), snap.hex())
-                    ctrl._reg_sent(snap, now)
-
-                    imsg = can.Message(arbitration_id=cid, data=snap, is_extended_id=False)
-                    for _ in range(OEM_RESPONSE):
-                        try:
-                            with self._txlock:
-                                self._tx.send(imsg)
-                        except Exception as e:
-                            logger.debug("CANWatcher send failed: %s", e)
-                            break
-
-                    if (now - last) >= OEM_COOLDOWN:
-                        self._last_oem[cid] = now
-                        ctrl.on_oem_write(scrolling)
-                        ctrl.trigger_slam(snap)
+                except zmq.Again:
+                    pass
 
             except Exception as e:
                 logger.warning("CANWatcher: %s", e)
                 time.sleep(0.1)
 
 
+# ---------------------------------------------------------------------------
+# DISController
+# ---------------------------------------------------------------------------
+
 class DISController:
     def __init__(self):
         _nice()
+        cfg = self._load_config()
+        self._setup_can(cfg)
+        self._setup_lines(cfg)
+        self._setup_zmq(cfg)
+        self._setup_state(cfg)
+        signal.signal(signal.SIGINT, self._shutdown)
+        signal.signal(signal.SIGTERM, self._shutdown)
+
+    def _load_config(self) -> dict:
         with open(CONFIG_PATH) as f:
             cfg = json.load(f)
-
-        feat = cfg.get("features", {}).get("fis_display", {})
+        feat = cfg["features"]["fis_display"]
         if not feat.get("enabled", False):
             sys.exit("fis_display disabled.")
-
         self.running = True
+        return cfg
 
-        interfaces = cfg.get("interfaces", {})
-        can_cfg = interfaces.get("can", {})
-        zmq_cfg = interfaces.get("zmq", {})
-        input_maps = cfg.get("input_mappings", {})
-        source_cfg = input_maps.get("source", {})
+    def _setup_can(self, cfg: dict):
+        can_ids = cfg["can_ids"]
+        source_cfg = cfg["input_mappings"]["source"]
+        zmq_cfg = cfg["interfaces"]["zmq"]
 
-        zmq_addr = zmq_cfg.get("metric_stream", "ipc:///run/rnse_control/hudiy_stream.ipc")
+        self._id_l1 = _hex(can_ids["fis_line1"], 0x363)
+        self._id_l2 = _hex(can_ids["fis_line2"], 0x365)
+        self._id_src = _hex(can_ids["source"], 0x661)
+        self._tv_source_byte = _hex(source_cfg["tv_mode_identifier"], 0x37)
+
         self._zmq_ctx = zmq.Context()
-        self._sub = self._make_sub(zmq_addr)
-        self._zmq_addr = zmq_addr
+        self._can_sub_addr = zmq_cfg.get("can_raw_stream", "ipc:///run/rnse_control/can_stream.ipc")
+        self._can_send_addr = zmq_cfg.get("send_address", "ipc:///run/rnse_control/can_send.ipc")
 
-        can_ids = cfg.get("can_ids", {})
-        id_l1 = _hex(can_ids.get("fis_line1", "0x363"), 0x363)
-        id_l2 = _hex(can_ids.get("fis_line2", "0x365"), 0x365)
-        id_src = _hex(can_ids.get("source", "0x661"), 0x661)
-        id_tv_presence = _hex(can_ids.get("tv_presence", "0x602"), 0x602)
+    def _setup_lines(self, cfg: dict):
+        feat = cfg["features"]["fis_display"]
 
-        iface = can_cfg.get("infotainment", "can0")
-        rx_bus = can.Bus(interface="socketcan", channel=iface, receive_own_messages=False)
-        tx_bus = can.Bus(interface="socketcan", channel=iface)
-        tx_lock = threading.Lock()
+        def speed_cfg(raw_cps):
+            cps = max(0.0, min(10.0, _float(raw_cps, 3.0)))
+            return (0.0, True) if cps == 0 else (round(1.0 / cps, 3), False)
 
-        def speed_cfg(raw):
-            v = max(0.0, min(10.0, float(raw)))
-            if v == 0:
-                return 0.35, True
-
-            min_cps = float(feat.get("scroll_min_cps", 1.25))
-            max_cps = float(feat.get("scroll_max_cps", 8.0))
-            if max_cps < min_cps:
-                max_cps = min_cps
-
-            cps = min_cps + (v - 1.0) * ((max_cps - min_cps) / 9.0)
-            return round(1.0 / cps, 3), False
-
-        pause = float(feat.get("scroll_pause", 2.0))
-        stagger = float(feat.get("stagger_offset", 1.0))
-        stype = str(feat.get("scroll_type", "oem")).lower()
-        mgap = int(feat.get("marquee_gap", 0))
-
-        def make_ctrl(can_id, name, raw_speed, stag, mode):
-            if mode == "0":
-                return None
-            spd, noscr = speed_cfg(raw_speed)
-            return LineController(can_id, tx_bus, tx_lock, name, spd, pause, stag, stype, mgap, noscr)
+        start_delay = _float(feat.get("start_delay"), 2.0)
+        end_delay = _float(feat.get("end_delay"), 2.0)
+        stagger = _float(feat.get("line_start_offset"), 1.0)
+        continuous = _bool(feat.get("continuous"), False)
+        continuous_gap = _int(feat.get("continuous_gap"), 3)
+        continuous_loop_delay = _bool(feat.get("continuous_loop_delay"), False)
 
         l1_mode = str(feat.get("line1_mode", "0"))
         l2_mode = str(feat.get("line2_mode", "0"))
-        raw_l1 = feat.get("line1_scroll_speed", feat.get("scroll_speed", 5))
-        raw_l2 = feat.get("line2_scroll_speed", feat.get("scroll_speed", 5))
 
-        self._ctrl_l1 = make_ctrl(id_l1, "L1", raw_l1, 0.0, l1_mode)
-        self._ctrl_l2 = make_ctrl(id_l2, "L2", raw_l2, stagger, l2_mode)
+        l1_speed, l1_noscroll = speed_cfg(feat.get("line1_scroll_speed_cps", 3))
+        l2_speed, l2_noscroll = speed_cfg(feat.get("line2_scroll_speed_cps", 3))
+
+        # Create watcher first (controllers filled in after)
+        self._watcher = CANWatcher(
+            self._zmq_ctx, self._can_sub_addr, self._can_send_addr,
+            self._id_src, self, self._tv_source_byte,
+        )
+
+        def make_ctrl(can_id, name, speed, line_stagger, mode, no_scroll):
+            if mode == "0":
+                return None
+            return LineController(
+                can_id=can_id,
+                zmq_ctx=self._zmq_ctx,
+                can_send_addr=self._can_send_addr,
+                name=name,
+                speed_seconds=speed,
+                start_delay=start_delay,
+                end_delay=end_delay,
+                stagger=line_stagger,
+                continuous=continuous,
+                continuous_gap=continuous_gap,
+                continuous_loop_delay=continuous_loop_delay,
+                no_scroll=no_scroll,
+                watcher=self._watcher,
+            )
+
+        self._ctrl_l1 = make_ctrl(self._id_l1, "L1", l1_speed, 0.0, l1_mode, l1_noscroll)
+        self._ctrl_l2 = make_ctrl(self._id_l2, "L2", l2_speed, stagger, l2_mode, l2_noscroll)
         self._ctrls = [c for c in (self._ctrl_l1, self._ctrl_l2) if c]
 
-        tv_byte = _hex(source_cfg.get("tv_mode_identifier", "0x37"), 0x37)
-
-        self._watcher = CANWatcher(
-            rx_bus, tx_bus, tx_lock, id_src, id_l1, id_l2,
-            self._ctrl_l1, self._ctrl_l2, self,
-            tv_byte=tv_byte, id_tv_presence=id_tv_presence
-        )
-        for c in self._ctrls:
-            c._watcher = self._watcher
+        self._watcher._lines = {self._id_l1: self._ctrl_l1, self._id_l2: self._ctrl_l2}
 
         self._l1_mode = l1_mode
         self._l2_mode = l2_mode
@@ -580,28 +557,29 @@ class DISController:
             feat.get("no_media_line1", "No Media"),
             feat.get("no_media_line2", ""),
         )
-        self._boot_delay = float(feat.get("boot_no_media_delay", 3.0))
+
+    def _setup_zmq(self, cfg: dict):
+        self._zmq_addr = cfg["interfaces"]["zmq"]["metric_stream"]
+        # socket created inside _listener thread for ZMQ thread-safety
+
+    def _setup_state(self, cfg: dict):
+        feat = cfg["features"]["fis_display"]
+        self._boot_delay = _float(feat.get("boot_no_media_delay"), 3.0)
         self._boot_time = time.monotonic()
-        self._rx_bus = rx_bus
-        self._tx_bus = tx_bus
-
-        self._media_active = False
-        self._media_last_t = 0.0
+        self._prio = PRIO_NONE
         self._media_texts = ("", "")
-        self._last_good_texts = ("", "")
         self._call_active = False
-        self._no_media_pushed = False
+        self._last_media_msg = 0.0
+        self._not_playing_t = 0.0
+        self._no_media_shown = False
+        self._no_media_grace = 0.0
 
-        for ctrl, text in ((self._ctrl_l1, self._no_media[0]), (self._ctrl_l2, self._no_media[1])):
-            if ctrl and text:
-                ctrl.set_text(text)
-
-        signal.signal(signal.SIGINT, self._shutdown)
-        signal.signal(signal.SIGTERM, self._shutdown)
+        for c, t in zip(self._ctrls, self._no_media):
+            if t:
+                c.set_text(t)
 
     def _make_sub(self, addr):
         sub = self._zmq_ctx.socket(zmq.SUB)
-        sub.setsockopt(zmq.RCVTIMEO, 1000)
         sub.connect(addr)
         for t in (b"HUDIY_MEDIA", b"HUDIY_PHONE"):
             sub.setsockopt(zmq.SUBSCRIBE, t)
@@ -621,147 +599,120 @@ class DISController:
 
     @staticmethod
     def _parse_mode(mode_str: str, fields: dict) -> str:
-        def clean(v):
-            s = str(v).strip() if v is not None else ""
-            return s if any(c.isalnum() for c in s) else ""
+        if not mode_str or str(mode_str) == "0":
+            return ""
 
-        keys = [k.strip() for k in mode_str.split("-")]
-        parts = [v for k in keys if (v := clean(fields.get(k, "")))]
+        def clean(v):
+            return str(v).strip() if v is not None else ""
+
+        keys = [k.strip().lower() for k in mode_str.split("-")]
+        parts = [v for v in (clean(fields.get(k, "")) for k in keys) if v]
         return " - ".join(parts) if len(parts) >= 2 else (parts[0] if parts else "")
 
-    def _to_lines(self, fields: dict, m1: str, m2: str):
-        return (
-            self._parse_mode(m1, fields) if self._ctrl_l1 else "",
-            self._parse_mode(m2, fields) if self._ctrl_l2 else "",
-        )
-
-    def _media_fields(self, d: dict):
+    def _media_fields(self, d):
         f = {
-            "title": d.get("title") or d.get("track", ""),
+            "title":  d.get("title") or d.get("track", ""),
             "artist": d.get("artist", ""),
-            "album": d.get("album", ""),
-            "source": d.get("source_label", ""),
+            "album":  d.get("album", ""),
+            "source": d.get("source_label") or d.get("source", ""),
         }
-        return self._to_lines(f, self._l1_mode, self._l2_mode)
+        l1 = self._parse_mode(self._l1_mode, f) if self._ctrl_l1 else ""
+        l2 = self._parse_mode(self._l2_mode, f) if self._ctrl_l2 else ""
+        return l1, l2
 
-    def _phone_fields(self, d: dict):
+    def _phone_fields(self, d):
         conn = d.get("connection_state", "")
         f = {
-            "caller": d.get("caller_name") or d.get("caller_id") or "Call",
-            "state": CALL_LABELS.get(d.get("state", ""), d.get("state", "")),
-            "name": d.get("name", ""),
+            "caller":     d.get("caller_name") or d.get("caller_id") or "Call",
+            "state":      CALL_LABELS.get(d.get("state", ""), d.get("state", "")),
+            "name":       d.get("name", ""),
             "connection": "Connected" if conn == "CONNECTED" else "Disconnected" if conn == "DISCONNECTED" else conn,
-            "battery": str(d.get("battery") or ""),
-            "signal": str(d.get("signal") or ""),
+            "battery":    str(d.get("battery", "")),
+            "signal":     str(d.get("signal", "")),
         }
-        return self._to_lines(f, self._ph_l1_mode, self._ph_l2_mode)
+        l1 = self._parse_mode(self._ph_l1_mode, f) if self._ctrl_l1 else ""
+        l2 = self._parse_mode(self._ph_l2_mode, f) if self._ctrl_l2 else ""
+        return l1, l2
 
     def _push(self, l1: str, l2: str):
+        l1 = _normalize(l1)
+        l2 = _normalize(l2)
         for ctrl, text in ((self._ctrl_l1, l1), (self._ctrl_l2, l2)):
             if not ctrl:
                 continue
-            if ctrl.set_text(text) and self._watcher.tv_active:
-                ctrl.clear_queue()
-                ctrl.trigger_slam(ctrl.snapshot())
+            changed = ctrl.set_text(text) if text else ctrl.clear()
+            if changed and self._watcher.tv_active:
+                ctrl._next_write = 0.0  # write new content immediately
 
     def _resolve(self):
-        if self._media_active:
-            l1, l2 = self._media_texts
-            if not l1:
-                l1 = self._last_good_texts[0]
-            if not l2:
-                l2 = self._last_good_texts[1]
-            self._push(l1, l2)
+        if self._prio >= PRIO_MEDIA:
+            self._push(*self._media_texts)
         else:
             self._push(*self._no_media)
-            self._no_media_pushed = True
 
     def _listener(self):
+        self._sub = self._make_sub(self._zmq_addr)
         pending = None
         deadline = None
-        pending_src = 0
         err_count = 0
-
-        # Use a poller so we block efficiently instead of busy-polling with NOBLOCK
-        poller = zmq.Poller()
-        poller.register(self._sub, zmq.POLLIN)
 
         while self.running:
             now = time.monotonic()
 
             if pending is not None and now >= deadline:
-                l1, l2 = pending
-                if self._media_active:
-                    if not l1:
-                        l1 = self._last_good_texts[0]
-                    if not l2:
-                        l2 = self._last_good_texts[1]
-                resolved = (l1, l2)
-                self._media_texts = resolved
-                if any(resolved):
-                    self._last_good_texts = resolved
+                self._media_texts = pending
                 if not self._call_active:
-                    self._push(*resolved)
+                    self._push(*pending)
                 pending = None
                 deadline = None
 
+            connected = (
+                self._last_media_msg > 0 and
+                (now - self._last_media_msg) < MEDIA_TIMEOUT
+            )
+
             if (
                 not self._call_active
-                and not self._media_active
-                and not self._no_media_pushed
+                and not self._no_media_shown
+                and not connected
+                and self._prio < PRIO_MEDIA
                 and (now - self._boot_time) >= self._boot_delay
+                and now >= self._no_media_grace
             ):
                 self._push(*self._no_media)
-                self._no_media_pushed = True
-                logger.info("No Media")
-
-            # Block until message arrives or deadline — whichever is sooner
-            if deadline is not None:
-                wait_ms = max(0, int((deadline - now) * 1000))
-            else:
-                wait_ms = 50
-
-            try:
-                socks = dict(poller.poll(wait_ms))
-            except Exception as e:
-                logger.warning("Poller: %s", e)
-                time.sleep(0.05)
-                continue
-
-            if self._sub not in socks:
-                continue
+                self._no_media_shown = True
 
             try:
                 parts = self._sub.recv_multipart(flags=zmq.NOBLOCK)
-                if len(parts) < 2:
-                    continue
-
-                topic = parts[0]
-                data = json.loads(parts[1])
+                topic, data = parts[0], json.loads(parts[1])
                 err_count = 0
 
                 if topic == b"HUDIY_MEDIA":
                     src = data.get("source_id", 0)
-                    state = data.get("media_state", "NONE")
+                    playing = data.get("playing", False)
+                    title = (data.get("title") or "").strip()
 
-                    if state in ("PLAYING", "PAUSED", "IDLE"):
-                        self._media_active = True
-                        self._no_media_pushed = False
+                    if src != 0 and (playing or title):
+                        self._last_media_msg = now
+                        self._no_media_shown = False
+                        self._no_media_grace = 0.0
+                        self._prio = PRIO_MEDIA
                         new = self._media_fields(data)
                         if new != pending:
-                            logger.info("MEDIA %s src=%s — lines: %r", state, src, new)
-                            db = SOURCE_CHANGE_DEBOUNCE if src != pending_src else DEBOUNCE
                             pending = new
-                            pending_src = src
-                            deadline = now + db
+                            recently_skipped = (
+                                self._not_playing_t > 0
+                                and (now - self._not_playing_t) < SKIP_WINDOW
+                            )
+                            deadline = now + (SKIP_DEBOUNCE if recently_skipped else DEBOUNCE)
                     else:
-                        if self._media_active or pending is not None:
-                            logger.info("MEDIA NONE — no source")
-                        self._media_active = False
-                        self._media_last_t = now
                         pending = None
                         deadline = None
-                        pending_src = 0
+                        self._not_playing_t = now
+                        self._last_media_msg = 0.0
+                        self._no_media_shown = False
+                        self._no_media_grace = now + NO_MEDIA_DEBOUNCE
+                        self._prio = PRIO_NONE
 
                 elif topic == b"HUDIY_PHONE":
                     state = data.get("state", "IDLE")
@@ -770,35 +721,23 @@ class DISController:
 
                     if self._call_active:
                         if not was:
-                            logger.info(
-                                "Call started (%s) — %s",
-                                state,
-                                {k: v for k, v in data.items() if k in (
-                                    "state", "caller_name", "caller_id",
-                                    "name", "connection_state", "battery", "signal"
-                                )},
-                            )
+                            logger.info("Call started (%s)", state)
+                        self._prio = PRIO_PHONE
                         self._push(*self._phone_fields(data))
                     elif was:
                         logger.info("Call ended — restoring display")
-                        if pending is not None:
-                            self._media_texts = pending
-                            self._last_good_texts = pending
-                            pending = None
-                            deadline = None
-                            pending_src = 0
+                        self._prio = PRIO_MEDIA if connected else PRIO_NONE
                         self._resolve()
 
             except zmq.Again:
-                pass
+                err_count = 0
+                sleep_for = max(0.0, min(0.05, deadline - now)) if deadline else 0.05
+                time.sleep(sleep_for)
             except Exception as e:
                 logger.warning("ZMQ: %s", e)
                 err_count += 1
                 if err_count >= 3:
                     self._reconnect_zmq()
-                    # Re-register new socket with poller
-                    poller.unregister(self._sub)
-                    poller.register(self._sub, zmq.POLLIN)
                     err_count = 0
                 else:
                     time.sleep(0.05)
@@ -814,12 +753,6 @@ class DISController:
                 time.sleep(0.5)
         except KeyboardInterrupt:
             self.running = False
-
-        for bus in (self._rx_bus, self._tx_bus):
-            try:
-                bus.shutdown()
-            except Exception:
-                pass
 
 
 if __name__ == "__main__":
