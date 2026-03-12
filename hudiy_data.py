@@ -78,7 +78,7 @@ MEDIA_SOURCE_MAP = {
     0: "None",
     1: "Android",
     2: "CarPlay",
-    3: "Bluetooth",
+    3: "BT",
     4: "Storage",
     5: "FM-Radio",
     6: "Web",
