@@ -1,0 +1,565 @@
+{
+  "diff": "radio->tv_active",
+  "timestamp": "2026-03-12T12:18:22.697352",
+  "changed": {
+    "5B5": {
+      "hex_before": "040a01000000000f",
+      "hex_after": "060801000000000f",
+      "ascii_before": "........",
+      "ascii_after": "........",
+      "freq_before": 5.0,
+      "freq_after": 5.0,
+      "decoded_before": {
+        "B10_Checksumme": 4,
+        "B10_Zaehler": 10,
+        "B10_QB_Wegimp_VL": "gueltiger_Wert",
+        "B10_QB_Wegimp_VR": "gueltiger_Wert",
+        "B10_QB_Wegimp_HL": "gueltiger_Wert",
+        "B10_QB_Wegimp_HR": "gueltiger_Wert",
+        "B10_Wegimp_VL": 1,
+        "B10_Wegimp_VR": 0,
+        "B10_Wegimp_HL": 0,
+        "B10_Wegimp_HR": 0,
+        "B10_QB_Fahrtr_VL": "Ersatz_Init_oder_Fehlerwert",
+        "B10_QB_Fahrtr_VR": "Ersatz_Init_oder_Fehlerwert",
+        "B10_QB_Fahrtr_HL": "Ersatz_Init_oder_Fehlerwert",
+        "B10_QB_Fahrtr_HR": "Ersatz_Init_oder_Fehlerwert",
+        "B10_Fahrtr_VL": "Vorwaerts",
+        "B10_Fahrtr_VR": "Vorwaerts",
+        "B10_Fahrtr_HL": "Vorwaerts",
+        "B10_Fahrtr_HR": "Vorwaerts"
+      },
+      "decoded_after": {
+        "B10_Checksumme": 6,
+        "B10_Zaehler": 8,
+        "B10_QB_Wegimp_VL": "gueltiger_Wert",
+        "B10_QB_Wegimp_VR": "gueltiger_Wert",
+        "B10_QB_Wegimp_HL": "gueltiger_Wert",
+        "B10_QB_Wegimp_HR": "gueltiger_Wert",
+        "B10_Wegimp_VL": 1,
+        "B10_Wegimp_VR": 0,
+        "B10_Wegimp_HL": 0,
+        "B10_Wegimp_HR": 0,
+        "B10_QB_Fahrtr_VL": "Ersatz_Init_oder_Fehlerwert",
+        "B10_QB_Fahrtr_VR": "Ersatz_Init_oder_Fehlerwert",
+        "B10_QB_Fahrtr_HL": "Ersatz_Init_oder_Fehlerwert",
+        "B10_QB_Fahrtr_HR": "Ersatz_Init_oder_Fehlerwert",
+        "B10_Fahrtr_VL": "Vorwaerts",
+        "B10_Fahrtr_VR": "Vorwaerts",
+        "B10_Fahrtr_HL": "Vorwaerts",
+        "B10_Fahrtr_HR": "Vorwaerts"
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        0,
+        1
+      ]
+    },
+    "363": {
+      "hex_before": "3130372e35202020",
+      "hex_after": "2041562020202020",
+      "ascii_before": "107.5   ",
+      "ascii_after": " AV     ",
+      "freq_before": 1.33,
+      "freq_after": 1.35,
+      "decoded_before": {
+        "RA1_DSP_Zeichen_1": 49,
+        "RA1_DSP_Zeichen_2": 48,
+        "RA1_DSP_Zeichen_3": 55,
+        "RA1_DSP_Zeichen_4": 46,
+        "RA1_DSP_Zeichen_5": 53,
+        "RA1_DSP_Zeichen_6": 32,
+        "RA1_DSP_Zeichen_7": 32,
+        "RA1_DSP_Zeichen_8": 32
+      },
+      "decoded_after": {
+        "RA1_DSP_Zeichen_1": 32,
+        "RA1_DSP_Zeichen_2": 65,
+        "RA1_DSP_Zeichen_3": 86,
+        "RA1_DSP_Zeichen_4": 32,
+        "RA1_DSP_Zeichen_5": 32,
+        "RA1_DSP_Zeichen_6": 32,
+        "RA1_DSP_Zeichen_7": 32,
+        "RA1_DSP_Zeichen_8": 32
+      },
+      "is_tv": true,
+      "changing_bytes": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "365": {
+      "hex_before": "1c1c1c464d1c1c1c",
+      "hex_after": "54562f564944454f",
+      "ascii_before": "...FM...",
+      "ascii_after": "TV/VIDEO",
+      "freq_before": 1.33,
+      "freq_after": 1.35,
+      "decoded_before": {
+        "RA2_DSP_Zeichen_9": 28,
+        "RA2_DSP_Zeichen_10": 28,
+        "RA2_DSP_Zeichen_11": 28,
+        "RA2_DSP_Zeichen_12": 70,
+        "RA2_DSP_Zeichen_13": 77,
+        "RA2_DSP_Zeichen_14": 28,
+        "RA2_DSP_Zeichen_15": 28,
+        "RA2_DSP_Zeichen_16": 28
+      },
+      "decoded_after": {
+        "RA2_DSP_Zeichen_9": 84,
+        "RA2_DSP_Zeichen_10": 86,
+        "RA2_DSP_Zeichen_11": 47,
+        "RA2_DSP_Zeichen_12": 86,
+        "RA2_DSP_Zeichen_13": 73,
+        "RA2_DSP_Zeichen_14": 68,
+        "RA2_DSP_Zeichen_15": 69,
+        "RA2_DSP_Zeichen_16": 79
+      },
+      "is_tv": true,
+      "changing_bytes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "531": {
+      "hex_before": "c100a061",
+      "hex_after": "c10020e1",
+      "ascii_before": "...a",
+      "ascii_after": ".. .",
+      "freq_before": 20.07,
+      "freq_after": 20.04,
+      "decoded_before": {
+        "LIA_Standlicht": "Kl58_ein",
+        "LIA_Abblendlicht": "aus",
+        "LIA_Fernlicht": "aus",
+        "LIA_Nebellicht": "aus",
+        "LIA_Nebelschluss": "aus",
+        "LIA_Rueckfahrlicht": 0,
+        "LIA_Parklicht_links": "Parklicht_L_ein",
+        "LIA_Parklicht_rechts": "Parklicht_R_ein",
+        "LIA_Blk_links": 0,
+        "LIA_Blk_rechts": 0,
+        "LIA_Anhaenger": 0,
+        "LIA_Warnblink": 0,
+        "LIA_BLK_Frequenz": 0,
+        "LIA_AFL_Schalter": "aus",
+        "LIA_Bremslicht": "aus",
+        "LIA_Tagesfahrlicht": 0,
+        "LIA_Blk_L_Kontrolle": 0,
+        "LIA_Blk_R_Kontrolle": 0,
+        "LIA_Kurv_Licht": 0,
+        "LIA_Warnblk_Status": 0,
+        "LIA_Zaehler": 10,
+        "LIA_Pruefsumme": 97
+      },
+      "decoded_after": {
+        "LIA_Standlicht": "Kl58_ein",
+        "LIA_Abblendlicht": "aus",
+        "LIA_Fernlicht": "aus",
+        "LIA_Nebellicht": "aus",
+        "LIA_Nebelschluss": "aus",
+        "LIA_Rueckfahrlicht": 0,
+        "LIA_Parklicht_links": "Parklicht_L_ein",
+        "LIA_Parklicht_rechts": "Parklicht_R_ein",
+        "LIA_Blk_links": 0,
+        "LIA_Blk_rechts": 0,
+        "LIA_Anhaenger": 0,
+        "LIA_Warnblink": 0,
+        "LIA_BLK_Frequenz": 0,
+        "LIA_AFL_Schalter": "aus",
+        "LIA_Bremslicht": "aus",
+        "LIA_Tagesfahrlicht": 0,
+        "LIA_Blk_L_Kontrolle": 0,
+        "LIA_Blk_R_Kontrolle": 0,
+        "LIA_Kurv_Licht": 0,
+        "LIA_Warnblk_Status": 0,
+        "LIA_Zaehler": 2,
+        "LIA_Pruefsumme": 225
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        2,
+        3
+      ]
+    },
+    "6DA": {
+      "hex_before": "328e1a0003",
+      "hex_after": "329702",
+      "ascii_before": "2....",
+      "ascii_after": "2..",
+      "freq_before": 0.5,
+      "freq_after": 0.5,
+      "decoded_before": {
+        "BAP_Data_OPS": 33586
+      },
+      "decoded_after": {
+        "BAP_Data_OPS": 33586
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        1,
+        2
+      ]
+    },
+    "65D": {
+      "hex_before": "7b8b38a319b6e60d",
+      "hex_after": "7b8b38a319b6e612",
+      "ascii_before": "{.8.....",
+      "ascii_after": "{.8.....",
+      "freq_before": 1.0,
+      "freq_after": 1.0,
+      "decoded_before": {
+        "DN1_Verlernzaehler": 123,
+        "DN1_KM_Stand": 211083,
+        "DN1_Jahr": 2026,
+        "DN1_Monat": 3,
+        "DN1_Tag": 12,
+        "DN1_Stunde": 11,
+        "DN1_Minute": 51,
+        "DN1_Sekunde": 27,
+        "DN1_alt_Kilometerstand": "aktuell_empfangen",
+        "DN1_alt_Zeit": "aktuell_empfangen"
+      },
+      "decoded_after": {
+        "DN1_Verlernzaehler": 123,
+        "DN1_KM_Stand": 211083,
+        "DN1_Jahr": 2026,
+        "DN1_Monat": 3,
+        "DN1_Tag": 12,
+        "DN1_Stunde": 11,
+        "DN1_Minute": 51,
+        "DN1_Sekunde": 37,
+        "DN1_alt_Kilometerstand": "aktuell_empfangen",
+        "DN1_alt_Zeit": "aktuell_empfangen"
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        6,
+        7
+      ]
+    },
+    "6C4": {
+      "hex_before": "b4",
+      "hex_after": "b3",
+      "ascii_before": ".",
+      "ascii_after": ".",
+      "freq_before": 8.8,
+      "freq_after": 7.47,
+      "decoded_before": null,
+      "decoded_after": null,
+      "is_tv": false,
+      "changing_bytes": [
+        0
+      ]
+    },
+    "6DC": {
+      "hex_before": "32d4320000000000",
+      "hex_after": "32d3000000000000",
+      "ascii_before": "2.2.....",
+      "ascii_after": "2.......",
+      "freq_before": 1.0,
+      "freq_after": 1.0,
+      "decoded_before": {
+        "BAP_Data_Rearview": 54322
+      },
+      "decoded_after": {
+        "BAP_Data_Rearview": 54066
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        1,
+        2,
+        3,
+        4,
+        6
+      ]
+    },
+    "6C0": {
+      "hex_before": "a3",
+      "hex_after": "a10f8aff4aff",
+      "ascii_before": ".",
+      "ascii_after": "....J.",
+      "freq_before": 1.27,
+      "freq_after": 1.26,
+      "decoded_before": null,
+      "decoded_after": null,
+      "is_tv": false,
+      "changing_bytes": [
+        0
+      ]
+    },
+    "65F": {
+      "hex_before": "014d4641464d3742",
+      "hex_after": "0000000000574155",
+      "ascii_before": ".MFAFM7B",
+      "ascii_after": ".....WAU",
+      "freq_before": 5.0,
+      "freq_after": 5.0,
+      "decoded_before": {
+        "FI1_MUX": 1,
+        "FI1_VIN_4": 77,
+        "FI1_VIN_5": 70,
+        "FI1_VIN_6": 65,
+        "FI1_VIN_7": 70,
+        "FI1_VIN_8": 77,
+        "FI1_VIN_9": 55,
+        "FI1_VIN_10": 66
+      },
+      "decoded_after": {
+        "FI1_MUX": 0,
+        "FI1_Geheimnis_1": 0,
+        "FI1_Geheimnis_2": 0,
+        "FI1_Geheimnis_3": 0,
+        "FI1_Geheimnis_4": 0,
+        "FI1_VIN_1": 87,
+        "FI1_VIN_2": 65,
+        "FI1_VIN_3": 85
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "151": {
+      "hex_before": "00a4b014",
+      "hex_after": "00a4f054",
+      "ascii_before": "....",
+      "ascii_after": "...T",
+      "freq_before": 9.99,
+      "freq_after": 9.98,
+      "decoded_before": {
+        "AB1_FrontCrash": "kein_Front_Crash",
+        "AB1_HeckCrash": "kein_Heck_Crash",
+        "AB1_Crash_FT": "kein_Seiten_Crash_Fahrer",
+        "AB1_Crash_BT": "kein_Seiten_Crash_Beifahrer",
+        "AB1_Rollover": "kein_Rollover",
+        "AB1_CrashStaerke": "kein_Crash",
+        "AB1_AirbagLampe_ein": "Lampe_aus",
+        "AB1_Airbag_deaktiviert": "aktiv",
+        "AB1_Beif_Airbag_deaktiviert": "deaktiviert",
+        "AB1_Systemfehler": "kein_Fehler",
+        "AB1_Fa_Gurt": "Gurt_nicht_gesteckt",
+        "AB1_Bf_Gurt": "Gurt_nicht_gesteckt",
+        "AB1_Diagnose": "nicht_in_Diagnose",
+        "AB1_Stellglied": "nicht_im_Stellgliedtest",
+        "AB1_BF_Anschnall": "keine_Warnung",
+        "AB1_KD_Fehler": "kein_Fehlerspeichereintrag",
+        "AB1_MessageZaehler": 11,
+        "AB1_Pruefsumme": 20
+      },
+      "decoded_after": {
+        "AB1_FrontCrash": "kein_Front_Crash",
+        "AB1_HeckCrash": "kein_Heck_Crash",
+        "AB1_Crash_FT": "kein_Seiten_Crash_Fahrer",
+        "AB1_Crash_BT": "kein_Seiten_Crash_Beifahrer",
+        "AB1_Rollover": "kein_Rollover",
+        "AB1_CrashStaerke": "kein_Crash",
+        "AB1_AirbagLampe_ein": "Lampe_aus",
+        "AB1_Airbag_deaktiviert": "aktiv",
+        "AB1_Beif_Airbag_deaktiviert": "deaktiviert",
+        "AB1_Systemfehler": "kein_Fehler",
+        "AB1_Fa_Gurt": "Gurt_nicht_gesteckt",
+        "AB1_Bf_Gurt": "Gurt_nicht_gesteckt",
+        "AB1_Diagnose": "nicht_in_Diagnose",
+        "AB1_Stellglied": "nicht_im_Stellgliedtest",
+        "AB1_BF_Anschnall": "keine_Warnung",
+        "AB1_KD_Fehler": "kein_Fehlerspeichereintrag",
+        "AB1_MessageZaehler": 15,
+        "AB1_Pruefsumme": 84
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        2,
+        3
+      ]
+    },
+    "661": {
+      "hex_before": "830112a000000000",
+      "hex_after": "8301123700000000",
+      "ascii_before": "........",
+      "ascii_after": "...7....",
+      "freq_before": 1.01,
+      "freq_after": 1.01,
+      "decoded_before": {
+        "RA4_Radio_on": 1,
+        "RA4_Show_Radio": 1,
+        "RA4_Radio_mute": 0,
+        "RA4_Radio_Master_locked": 0,
+        "RA4_VNC_OFF": 0,
+        "RA4_Radio_Surround": "inaktiv",
+        "RA4_Radio_Wake_Up_Komfort": 0,
+        "RA4_Radio_Error_flag": "Fehlerspeichereintrag",
+        "RA4_Radio_Mode": 1,
+        "RA4_Radio_Para1": 18,
+        "RA4_Radio_Para2": 160,
+        "RA4_Radio_Para3": 0,
+        "RA4_Radio_Para4": 0,
+        "RA4_Radio_Para5": 0,
+        "RA4_Radio_Para6": 0
+      },
+      "decoded_after": {
+        "RA4_Radio_on": 1,
+        "RA4_Show_Radio": 1,
+        "RA4_Radio_mute": 0,
+        "RA4_Radio_Master_locked": 0,
+        "RA4_VNC_OFF": 0,
+        "RA4_Radio_Surround": "inaktiv",
+        "RA4_Radio_Wake_Up_Komfort": 0,
+        "RA4_Radio_Error_flag": "Fehlerspeichereintrag",
+        "RA4_Radio_Mode": 1,
+        "RA4_Radio_Para1": 18,
+        "RA4_Radio_Para2": 55,
+        "RA4_Radio_Para3": 0,
+        "RA4_Radio_Para4": 0,
+        "RA4_Radio_Para5": 0,
+        "RA4_Radio_Para6": 0
+      },
+      "is_tv": true,
+      "changing_bytes": [
+        3
+      ]
+    },
+    "3C3": {
+      "hex_before": "44800000808039bb",
+      "hex_after": "4480000080a0739b",
+      "ascii_before": "D.....9.",
+      "ascii_after": "D.....s.",
+      "freq_before": 9.99,
+      "freq_after": 9.98,
+      "decoded_before": {
+        "LW1_Lenkradwinkel": 2.9749999999999996,
+        "LW1_Vorzeichen": "negatives_Vorzeichen",
+        "LW1_Geschwindigkeit": 0.0,
+        "LW1_Geschw_Vorzeichen": "positives_Vorzeichen",
+        "LW1_ID": "kalibriert",
+        "LW1_Quelle_Init": "Bremse_3",
+        "LW1_Int_Status": "ok",
+        "LW1_KL30_Ausfall": "ok",
+        "LW1_Zaehler": 8,
+        "LW1_CRC8CHK": 57,
+        "LW1_Pruefsumme": 187
+      },
+      "decoded_after": {
+        "LW1_Lenkradwinkel": 2.9749999999999996,
+        "LW1_Vorzeichen": "negatives_Vorzeichen",
+        "LW1_Geschwindigkeit": 0.0,
+        "LW1_Geschw_Vorzeichen": "positives_Vorzeichen",
+        "LW1_ID": "kalibriert",
+        "LW1_Quelle_Init": "Bremse_3",
+        "LW1_Int_Status": "ok",
+        "LW1_KL30_Ausfall": "ok",
+        "LW1_Zaehler": 10,
+        "LW1_CRC8CHK": 115,
+        "LW1_Pruefsumme": 155
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        5,
+        6,
+        7
+      ]
+    },
+    "623": {
+      "hex_before": "0011512712032026",
+      "hex_after": "0011513712032026",
+      "ascii_before": "..Q'.. &",
+      "ascii_after": "..Q7.. &",
+      "freq_before": 1.0,
+      "freq_after": 1.0,
+      "decoded_before": {
+        "KO2_DCF": 0,
+        "KO2_Reset": 0,
+        "KO2_24h_Anzeige": 0,
+        "KO2_WeckzSH_OK": 0,
+        "KO2_QV": 0,
+        "KO2_Stunde": 17,
+        "KO2_Minute": 81,
+        "KO2_Sekunde": 39,
+        "KO2_Tag": 18,
+        "KO2_Monat": 3,
+        "KO2_Jahrhundert": 32,
+        "KO2_Jahr": 38
+      },
+      "decoded_after": {
+        "KO2_DCF": 0,
+        "KO2_Reset": 0,
+        "KO2_24h_Anzeige": 0,
+        "KO2_WeckzSH_OK": 0,
+        "KO2_QV": 0,
+        "KO2_Stunde": 17,
+        "KO2_Minute": 81,
+        "KO2_Sekunde": 55,
+        "KO2_Tag": 18,
+        "KO2_Monat": 3,
+        "KO2_Jahrhundert": 32,
+        "KO2_Jahr": 38
+      },
+      "is_tv": false,
+      "changing_bytes": [
+        3
+      ]
+    },
+    "6C2": {
+      "hex_before": "a00f8aff4aff",
+      "hex_after": "a8",
+      "ascii_before": "....J.",
+      "ascii_after": ".",
+      "freq_before": 9.86,
+      "freq_after": 9.96,
+      "decoded_before": null,
+      "decoded_after": null,
+      "is_tv": false,
+      "changing_bytes": [
+        0
+      ]
+    }
+  },
+  "appeared": {
+    "461": {
+      "label": "mmi",
+      "is_tv_related": false,
+      "count": 1,
+      "freq_hz": 0,
+      "dlc": 6,
+      "latest_hex": "377001000000",
+      "bytes": [
+        55,
+        112,
+        1,
+        0,
+        0,
+        0
+      ],
+      "ascii_hint": "7p....",
+      "changing_bytes": [],
+      "payload_stable": true,
+      "has_text": true,
+      "decoded": {
+        "RA6_Ziel": 55,
+        "RA6_Command": 112,
+        "RA6_Operand_0": 1,
+        "RA6_Operand_1": 0,
+        "RA6_Operand_2": 0,
+        "RA6_Operand_3": 0
+      },
+      "first_seen_ms": 1773337855178.0713
+    }
+  },
+  "disappeared": {}
+}
