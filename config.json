@@ -1,22 +1,96 @@
 {
   "branch": "testing",
-  "dis_type": "",
-  "can_interface": "can0",
-  "zmq": {
-    "can_raw_stream": "ipc:///run/rnse_control/can_stream.ipc",
-    "send_address": "ipc:///run/rnse_control/can_send.ipc",
-    "system_events": "ipc:///run/rnse_control/base_events.ipc",
-    "metric_stream": "ipc:///run/rnse_control/hudiy_stream.ipc",
-    "dis_draw": "ipc:///run/rnse_control/dis_draw.ipc",
-    "dis_status": "ipc:///run/rnse_control/dis_status.ipc",
-    "tp2_stream": "ipc:///run/rnse_control/tp2_stream.ipc",
-    "tp2_command": "ipc:///run/rnse_control/tp2_cmd.ipc"
+  "repo": "https://github.com/DSparks156x/RNS-E-Hudiy",
+  "config_restore_repo": "https://github.com/DSparks156x/RNS-E-Hudiy",
+  "config_restore_branch": "testing",
+  "interfaces": {
+    "can": {
+      "infotainment": "can0",
+      "diagnostic": "can0"
+    },
+    "zmq": {
+      "can_raw_stream": "ipc:///run/rnse_control/can_stream.ipc",
+      "send_address": "ipc:///run/rnse_control/can_send.ipc",
+      "system_events": "ipc:///run/rnse_control/base_events.ipc",
+      "metric_stream": "ipc:///run/rnse_control/hudiy_stream.ipc",
+      "dis_draw": "ipc:///run/rnse_control/dis_draw.ipc",
+      "dis_status": "ipc:///run/rnse_control/dis_status.ipc",
+      "tp2_stream": "ipc:///run/rnse_control/tp2_stream.ipc",
+      "tp2_command": "ipc:///run/rnse_control/tp2_cmd.ipc"
+    }
+  },
+  "display": {
+    "mode": "nav",
+    "road_side": "right",
+    "units": {
+      "speed": "imperial",
+      "ambient_temp": "imperial"
+    },
+    "text_scrolling": {
+      "continuous": true,
+      "speed_ms": 400,
+      "start_delay": 0,
+      "end_delay": 0
+    },
+    "text_centering": true
+  },
+  "features": {
+    "day_night_mode": true,
+    "sync_android_auto": false,
+    "time_sync": {
+      "enabled": true,
+      "data_format": "old_logic"
+    },
+    "power_management": {
+      "auto_shutdown": {
+        "enabled": false,
+        "trigger": "ignition_off"
+      },
+      "listen_only_mode": {
+        "enabled": true,
+        "delay_seconds": 10
+      },
+      "gpio_shutdown": {
+        "enabled": true,
+        "pin": 12,
+        "active_low": true,
+        "delay_seconds": 60
+      }
+    },
+    "tv_simulation": {
+      "enabled": false
+    },
+    "fis_display": {
+        "enabled": true,
+        "line1_mode": "title",
+        "line2_mode": "source",
+        "phone_line1_mode": "caller",
+        "phone_line2_mode": "state",
+        "line1_scroll_speed_cps": 3,
+        "line2_scroll_speed_cps": 2,
+        "start_delay": 2.0,
+        "end_delay": 2.0,
+        "line_start_offset": 2.0,
+        "continuous": true,
+        "continuous_gap": 3,
+        "continuous_loop_delay": false,
+        "boot_no_media_delay": 3.0,
+        "no_media_confirm_count": 4,
+        "no_media_line1": "No Media",
+        "no_media_line2": ""
+    },
+    "mmi_controls": true,
+    "mfsw_controls": true,
+    "source_controls": false,
+    "system_actions": true,
+    "car_time_zone": "America/Denver",
+    "debug_mode": false
   },
   "can_ids": {
     "light_status": "0x635",
     "time_data": "0x623",
     "ignition_status": "0x2C3",
-    "tv_presence": "",
+    "tv_presence": "0x602",
     "fis_line1": "0x363",
     "fis_line2": "0x365",
     "media_status": "0x6C1",
@@ -24,60 +98,6 @@
     "mmi": "0x461",
     "mfsw": "0x5C3",
     "source": "0x661"
-  },
-  "features": {
-    "day_night_mode": true,
-    "sync_android_auto": false,
-    "sync_autobox": false,
-    "time_sync": {
-      "enabled": true,
-      "data_format": "old_logic"
-    },
-    "auto_shutdown": {
-      "enabled": false,
-      "trigger": "ignition_off",
-      "kl15_kls_timer_enabled": true
-    },
-    "listen_only_mode": {
-      "enabled": true
-    },
-    "gpio_shutdown": {
-      "enabled": true,
-      "pin": 12,
-      "active_low": true
-    },
-    "tv_simulation": {
-      "enabled": true
-    },
-    "fis_display": {
-      "enabled": true,
-      "line1_mode": "title",
-      "line2_mode": "source",
-      "phone_line1_mode": "caller",
-      "phone_line2_mode": "state",
-      "line1_scroll_speed": 6,
-      "line2_scroll_speed": 1,
-      "scroll_min_cps": 1.25,
-      "scroll_max_cps": 10.0,
-      "scroll_pause": 2.0,
-      "stagger_offset": 2,
-      "scroll_type": "marquee",
-      "marquee_gap": 3,
-      "boot_no_media_delay": 3.0,
-      "no_media_line1": "No Media",
-      "no_media_line2": ""
-    },
-    "dis_mode": "nav",
-    "source_controls": true,
-    "mmi_controls": true,
-    "mfsw_controls": true,
-    "system_actions": true,
-    "light_sensor_installed": true,
-    "car_time_zone": "America/Denver",
-    "road_side": "right",
-    "speed_units": "imperial",
-    "ambient_temp_units": "imperial",
-    "debug_mode": false
   },
   "thresholds": {
     "cooldown_period": 0.2,
@@ -88,64 +108,75 @@
     "time_sync_threshold_minutes": 0.1,
     "daynight_cooldown_seconds": 10
   },
-  "mmi_scroll_commands": [
-    "0,32",
-    "0,64"
-  ],
-  "key_mappings": {
-    "mmi_short": {
-      "1,0": "KEY_V",
-      "2,0": "KEY_N",
-      "64,0": "KEY_UP",
-      "128,0": "KEY_DOWN",
-      "0,16": "KEY_ENTER",
-      "0,32": "KEY_2",
-      "0,64": "KEY_1",
-      "0,2": "KEY_ESC",
-      "0,1": "KEY_H"
-    },
-    "mmi_long": {
-      "1,0": "KEY_LEFT",
-      "2,0": "KEY_RIGHT",
-      "64,0": null,
-      "128,0": "KEY_M",
-      "0,16": null,
-      "0,32": null,
-      "0,64": null,
-      "0,2": "KEY_0",
-      "0,1": null
-    },
-    "mmi_extended": {
-      "1,0": null,
-      "2,0": "sudo shutdown -h now",
-      "64,0": null,
-      "128,0": null,
-      "0,16": "sudo reboot",
-      "0,32": null,
-      "0,64": null,
-      "0,2": null,
-      "0,1": null
-    },
-    "mfsw_commands": {
-      "scroll_up": "0x04",
-      "scroll_down": "0x05",
-      "mode_press": "0x08",
-      "release": [
-        "0x00",
-        "0x00"
-      ]
+  "input_mappings": {
+    "mmi": {
+      "scroll_commands": [
+        "0,32",
+        "0,64"
+      ],
+      "short_press": {
+        "1,0": "KEY_V",
+        "2,0": "KEY_N",
+        "64,0": "KEY_UP",
+        "128,0": "KEY_DOWN",
+        "0,16": "KEY_ENTER",
+        "0,32": "KEY_2",
+        "0,64": "KEY_1",
+        "0,2": "KEY_ESC",
+        "0,1": "KEY_H"
+      },
+      "long_press": {
+        "1,0": "KEY_LEFT",
+        "2,0": "KEY_RIGHT",
+        "64,0": null,
+        "128,0": "KEY_M",
+        "0,16": null,
+        "0,32": null,
+        "0,64": null,
+        "0,2": "KEY_0",
+        "0,1": null
+      },
+      "extended_press": {
+        "1,0": null,
+        "2,0": "sudo shutdown -h now",
+        "64,0": null,
+        "128,0": null,
+        "0,16": "sudo reboot",
+        "0,32": null,
+        "0,64": null,
+        "0,2": null,
+        "0,1": null
+      }
     },
     "mfsw": {
-      "scroll_up": "KEY_VOLUMEUP",
-      "scroll_down": "KEY_VOLUMEDOWN",
-      "mode_short": "KEY_ENTER",
-      "mode_long": "KEY_NEXTSONG"
+      "commands": {
+        "scroll_up": "0x0B",
+        "scroll_down": "0x0C",
+        "mode_press": "0x1C",
+        "ptt_press": "0x2A",
+        "scroll_click": "0x08",
+        "release": [
+          "0x00",
+          "0x00"
+        ]
+      },
+      "short_press": {
+        "scroll_up": "KEY_V",
+        "scroll_down": "KEY_N",
+        "mode": "KEY_ENTER",
+        "ptt": "KEY_M",
+        "scroll_click": "KEY_B"
+      },
+      "long_press": {
+        "mode": "KEY_ESC",
+        "ptt": "KEY_H",
+        "scroll_click": "KEY_B"
+      }
+    },
+    "source": {
+      "tv_mode_identifier": "0x37",
+      "play_key": "KEY_X",
+      "pause_key": "KEY_C"
     }
-  },
-  "source_data": {
-    "tv_mode_identifier": "0x37",
-    "play_key": "KEY_X",
-    "pause_key": "KEY_C",
-    "source_pause": false
   }
 }
