@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>RNS-E Universal Simple</title>
+<style>
+@font-face {
+  font-family: "Zurich Extended BT";
+  src: url("static/assets/fonts/zurich/Zurich Extended BT.ttf") format("truetype");
+}
+:root { --accent: #FF0000; --text-active: #FFFFFF; }
+* { box-sizing: border-box; touch-action: none; }
+body { margin: 0; background: #000; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+#ui-scaler {
+  width: 800px; height: 480px;
+  position: relative; overflow: hidden;
+  background-image: url('static/assets/backgrounds/wallpaper-home.png');
+  background-size: 100% 100%;
+  font-family: "Zurich Extended BT", sans-serif;
+}
+
+#pointer {
+  position: absolute; z-index: 100; top: 0; left: 0;
+  display: flex; align-items: center;
+  will-change: transform;
+}
+
+#dot { width: 11px; height: 11px; background: #FFF; border-radius: 50%; position: relative; }
+#dot::after {
+  content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 21px; height: 21px; border: 1.5px solid var(--accent); border-radius: 50%;
+}
+#line { width: 32px; height: 2px; background: #FFF; margin-left: -5px; }
+
+#menu-view { position: absolute; top: 84px; left: 38px; right: 120px; height: 312px; }
+.menu-body { height: 100%; padding-left: 119px; overflow: hidden; }
+
+.nav-item {
+  display: flex; align-items: center; height: 52px; 
+  font-size: 1.85em; color: var(--accent);
+}
+.selected { color: var(--text-active); }
+</style>
+</head>
+<body>
+
+<div id="ui-scaler">
+  <div id="pointer"><div id="dot"></div><div id="line"></div></div>
+  <div id="menu-view"><div class="menu-body" id="list"></div></div>
+</div>
+
+<script>
+let globalIdx = 0;
+let viewOffset = 0;
+let scrollAmount = 0; // The "Bucket"
+const THRESHOLD = 40; // How much you need to scroll to move 1 item
+const coords = [];
+
+function initCoords() {
+    for (let i = 0; i < 6; i++) {
+        const y = 84 + (i * 52) + 26 - 5.5;
+        const dy = Math.abs(y - 233);
+        const x = (417 - Math.sqrt((320**2) - (Math.min(319, dy)**2))) - 20.5;
+        coords.push({x, y});
+    }
+}
+
+function update() {
+    const list = document.getElementById('list');
+    const items = document.querySelectorAll('.nav-item');
+    const localIdx = globalIdx - viewOffset;
+    items.forEach((item, i) => item.classList.toggle('selected', i === globalIdx));
+    list.scrollTop = viewOffset * 52;
+    const p = coords[localIdx];
+    document.getElementById('pointer').style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
+}
+
+function move(dir) {
+    let next = globalIdx + dir;
+    if (next < 0 || next >= 30) return;
+    globalIdx = next;
+    if (globalIdx < viewOffset) viewOffset = globalIdx;
+    else if (globalIdx >= viewOffset + 6) viewOffset = globalIdx - 5;
+    update();
+}
+
+/**
+ * THE BUCKET SCROLL
+ * Works for slow finger crawls AND fast mouse wheel clicks.
+ */
+window.addEventListener('wheel', e => {
+    scrollAmount += e.deltaY;
+
+    // If bucket is full (positive or negative)
+    if (Math.abs(scrollAmount) >= THRESHOLD) {
+        move(scrollAmount > 0 ? 1 : -1);
+        scrollAmount = 0; // Empty the bucket
+    }
+}, { passive: true });
+
+window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowUp') move(-1);
+    if (e.key === 'ArrowDown') move(1);
+});
+
+window.onload = () => {
+    const list = document.getElementById('list');
+    for(let i=1; i<=30; i++) {
+        const div = document.createElement('div');
+        div.className = 'nav-item';
+        div.innerText = `MENU ITEM ${i}`;
+        list.appendChild(div);
+    }
+    const resize = () => {
+        const s = Math.min(window.innerWidth / 800, window.innerHeight / 480);
+        document.getElementById('ui-scaler').style.transform = `scale(${s})`;
+    };
+    window.addEventListener('resize', resize);
+    resize();
+    initCoords();
+    update();
+};
+</script>
+</body>
+</html>

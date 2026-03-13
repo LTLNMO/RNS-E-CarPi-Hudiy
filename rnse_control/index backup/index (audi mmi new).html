@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RNS-E Control</title>
+
+<link rel="stylesheet" href="static/assets/icons/fontawesome/css/fontawesome.min.css">
+<link rel="stylesheet" href="static/assets/icons/fontawesome/css/solid.min.css">
+
+<style>
+/* ---------- FONTS ---------- */
+@font-face {
+  font-family: "Zurich Extended BT";
+  src: url("static/assets/fonts/zurich/Zurich Extended BT.ttf") format("truetype");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Zurich Extended BT";
+  src: url("static/assets/fonts/zurich/Zurich Bold Extended BT.ttf") format("truetype");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Zurich BT";
+  src: url("static/assets/fonts/zurich/Zurich BT.ttf") format("truetype");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+
+/* ---------- THEMES ---------- */
+body[data-theme="dark"] {
+  --bg: #000000;
+  --panel: #1a1a1a;
+  --accent: #FF3223;          
+  --text: #E0E0E0; --sub: #888888; 
+  --border: #5e5e5e;          
+  --title-border: #FFFFFF; 
+  --input-bg: #121212;
+  --input-text: #B0B0B0; --input-border: #333333;
+  --toggle-border: #FFFFFF; --toggle-knob: #505050; --toggle-on-bg: #d7d7d7;
+  --icon-filter: none;
+  --back-gradient: linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0%, rgba(255, 255, 255, 0.03) 65%, rgba(255, 255, 255, 0.12) 100%);
+  --scrollbar-track: #222222;
+}
+body[data-theme="light"] {
+  --bg: #F0F0F0; --panel: #FFFFFF; --accent: #FF3223;          
+  --text: #333333; --sub: #6e6e6e; --border: #999999;
+  --title-border: #000000; 
+  --input-bg: #FFFFFF; --input-text: #111111; --input-border: #BBBBBB;
+  --toggle-border: #333333; --toggle-knob: #FFFFFF; --toggle-on-bg: #3c3c3c;
+  --icon-filter: invert(1);
+  --back-gradient: linear-gradient(to bottom, rgba(0, 0, 0, 0.0) 0%, rgba(0, 0, 0, 0.05) 70%, rgba(0, 0, 0, 0.15) 100%);
+  --scrollbar-track: #D0D0D0;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; 
+}
+
+body {
+  background: var(--bg); font-family: "Zurich Extended BT", sans-serif; 
+  color: var(--text); transition: background 0.3s, color 0.3s; 
+  font-size: 1.25em; 
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+* { 
+  box-sizing: border-box; 
+  outline: none !important;
+}
+
+#menu-view, #detail-view {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.hidden { display: none !important; }
+
+/* ---------- TITLES & HEADERS ---------- */
+.header-container {
+  height: 100px;
+  display: flex; align-items: center; 
+  padding: 0 30px; 
+  flex-shrink: 0; position: relative;
+}
+
+#detail-view .header-container {
+    padding-left: 0;
+}
+
+.header-container::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1.5px;
+  background: linear-gradient(to right, var(--title-border) 0%, var(--title-border) 85%, transparent 100%);
+}
+
+.header-main-info {
+    display: flex; 
+    align-items: center; 
+    overflow: visible;
+    height: 100%;
+    flex: 1;
+}
+
+.header-text-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    text-align: left;
+    flex: 1;
+    overflow: hidden;
+}
+
+.header-separator, .header-separator-right {
+    width: 1.5px;
+    height: 85px; 
+    margin-top: 15px; 
+    background: linear-gradient(to bottom, transparent 0%, var(--title-border) 100%);
+    flex-shrink: 0;
+}
+
+.header-separator { margin-right: 30px; }
+.header-separator-right { margin-left: 25px; }
+
+.header-text-actions {
+    width: 110px; 
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly; 
+    align-items: flex-end;
+    flex-shrink: 0;
+    height: 100%;
+    padding: 10px 0;
+}
+
+h1, h2 { 
+    margin: 0; color: var(--accent); font-weight: 600; 
+    font-size: 2.1em; 
+    line-height: 1.0; 
+    letter-spacing: -0.5px;
+    white-space: nowrap; 
+}
+
+.subhead { 
+    color: var(--sub); 
+    margin: 4px 0 0 0; 
+    padding: 0;
+    font-size: 1.1em;
+    line-height: 1.2;
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+
+.main-subhead {
+    margin: 2px 0 0 4px; 
+}
+
+h3 { 
+  color: var(--accent); 
+  font-size: 1.4em;
+  text-transform: uppercase; 
+  margin: 60px 0 10px 0; 
+  padding-bottom: 8px; 
+  position: relative;
+  scroll-margin-top: 20px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+#detail-content h3:first-of-type {
+    margin-top: 20px; 
+    scroll-margin-top: 20px;
+}
+
+h3::after {
+  content: ''; position: absolute; left: 0; bottom: 0; height: 1px; width: 100%;
+  background: linear-gradient(to right, var(--title-border) 0%, var(--title-border) 85%, transparent 100%);
+}
+
+/* ---------- BORDER LOGIC ---------- */
+h3:last-of-type::after { display: none; }
+.nav-item:last-of-type .nav-border { display: none; }
+.row:last-of-type .nav-border { display: none; }
+.row:has(+ h3) .nav-border { display: none; }
+h3 + .row { margin-top: -10px; }
+
+/* ---------- BACK & CHEVRON BUTTONS ---------- */
+.back-btn {
+  background: var(--back-gradient);
+  border: none; 
+  cursor: pointer; 
+  padding: 0; 
+  margin: 0; 
+  width: 130px; 
+  height: 100px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.back-img, .chevron-img {
+  width: auto;
+  display: block;
+  filter: var(--icon-filter);
+  transition: filter 0.1s ease;
+}
+
+.back-img { height: 32px; }
+.nav-item .chevron-img { height: 24px; }
+.cycler .chevron-img, .number-stepper .chevron-img { height: 16px; }
+
+.cycler:active .chevron-img, .step-btn:active .chevron-img {
+  filter: url(#audi-red-final) drop-shadow(0px 0px 1px #FF3223) !important;
+  transform: scale(1.1);
+}
+
+.chevron-img.left {
+  transform: rotate(180deg);
+}
+.step-btn:active .chevron-img.left {
+  transform: rotate(180deg) scale(1.1);
+}
+
+.cycler:active .cycler-value {
+  color: var(--text);
+  transition: color 0.2s ease;
+}
+
+/* Persistent "Clicked" Red State */
+.clicked .back-img {
+  filter: url(#audi-red-final) drop-shadow(0px 0px 1px #FF3223) !important;
+  transform: scale(0.96);
+  transition: none;
+}
+
+.clicked .chevron-img {
+  filter: url(#audi-red-final) drop-shadow(0px 0px 1px #FF3223) !important;
+  transform: scale(1.05);
+  transition: color 0.2s ease;
+}
+
+/* ---------- NAV ITEMS & ROWS ---------- */
+.menu-body, .content-body { 
+    flex: 1; 
+    min-height: 0;
+    overflow-y: auto; 
+    padding: 5px 30px 40px; 
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+}
+
+.nav-item, .row, #detail-content h3 {
+    scroll-snap-align: start;
+    scroll-snap-stop: always; 
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 20px; 
+  padding: 12px 0; 
+  cursor: pointer; 
+  position: relative; 
+  min-height: 85px;
+}
+
+.nav-border {
+  content: ''; position: absolute; left: 0; right: 0;
+  height: 1.5px; bottom: 0;
+  background: linear-gradient(to right, transparent 0%, var(--border) 8%, var(--border) 92%, transparent 100%);
+}
+
+.nav-label { 
+    font-weight: 600; 
+    font-size: 1.6em; 
+    color: var(--text); 
+    line-height: 1.0;
+    margin: 0;
+}
+
+.nav-desc { 
+    font-size: 0.9em; 
+    color: var(--sub); 
+    font-weight: 400; 
+    margin-top: 2px;
+    line-height: 1.1; 
+    margin-left: 1px;
+}
+
+.nav-item i:not(.fa-chevron-right) { 
+    color: var(--text); 
+    width: 40px;        
+    text-align: center;
+    font-size: 1.4em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-action-group {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-left: auto;
+}
+
+/* ---------- TOGGLES ---------- */
+.toggle {
+  --t-width: 76px; --t-height: 34px; --b-thick: 2.5px; 
+  width: var(--t-width); height: var(--t-height); border-radius: calc(var(--t-height) / 2);
+  border: var(--b-thick) solid var(--toggle-border); position: relative;
+  cursor: pointer; transition: all 0.2s ease; flex-shrink: 0;
+  background-color: transparent; box-sizing: border-box;
+}
+.toggle::after {
+  content: ""; width: var(--t-height); height: var(--t-height); border-radius: 50%;
+  background-color: var(--toggle-knob); border: var(--b-thick) solid var(--toggle-border);
+  position: absolute; top: 50%; transform: translateY(-50%);
+  left: calc(var(--b-thick) * -1); transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+.toggle.on { background-color: var(--toggle-on-bg); }
+.toggle.on::after { left: calc(var(--t-width) - var(--t-height) - var(--b-thick)); }
+
+/* ---------- ROWS ---------- */
+.row { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 12px 0; 
+    min-height: 65px; 
+    position: relative; 
+    gap: 15px;
+}
+.label-container { 
+    flex: 1; 
+    min-width: 0;
+    /* This restricts how far the text can travel to the right */
+    max-width: 60%; 
+    /* This pushes the container to the far left of the row */
+    margin-right: auto; 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.label-container.overflowing {
+    mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.label { 
+    font-weight: 600; 
+    font-size: 1.25em; 
+    line-height: 1.0; 
+}
+
+.label.marquee-active {
+    display: inline-block;
+    padding-left: 0;
+    animation: marquee-yoyo 8s ease-in-out infinite alternate; 
+}
+
+.row-desc { 
+    font-size: 0.8em; 
+    color: var(--sub); 
+    font-family: "Zurich BT"; 
+    margin-top: 2px; 
+    line-height: 1.1; 
+    margin-left: 1px;
+}
+
+/* ---------- INPUTS & CYCLERS ---------- */
+input, .cycler, .number-stepper, .stepper-controls {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+input {
+  background-color: transparent;
+  border: none;
+  border-bottom: 1.5px solid;
+  border-image: linear-gradient(to right, transparent 0%, var(--border) 30%, var(--border) 70%, transparent 100%) 1;
+  color: var(--input-text);
+  padding: 0 10px; 
+  height: 48px; 
+  text-align: right;
+  font-size: 1.0em; 
+  font-family: "Zurich BT", sans-serif;
+  transition: border-image 0.4s ease, color 0.4s ease;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+input:focus {
+  outline: none;
+  border-image: linear-gradient(to right, transparent 0%, var(--accent) 20%, var(--accent) 80%, transparent 100%) 1;
+  color: var(--text);
+  text-indent: 0 !important;
+  animation: none !important;
+}
+
+/* Continuous Loop Marquee */
+@keyframes marquee-yoyo {
+  0%, 15% { text-indent: 0%; transform: translateX(0); }        
+  85%, 100% { text-indent: -100%; transform: translateX(calc(-100% + 180px)); }   
+}
+
+/* Specific logic for labels since they don't use text-indent like inputs */
+.label.marquee-active {
+    animation: marquee-label-yoyo 8s ease-in-out infinite alternate;
+}
+
+@keyframes marquee-label-yoyo {
+  0%, 15% { transform: translateX(0); }        
+  85%, 100% { transform: translateX(calc(-100% + 80%)); }   
+}
+
+.marquee-active { 
+  animation: marquee-yoyo 8s ease-in-out infinite alternate; 
+}
+
+/* Hide HTML5 number spin buttons */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+
+.number-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 48px;
+}
+
+.stepper-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1.5px solid;
+    border-image: linear-gradient(to right, transparent 0%, var(--border) 30%, var(--border) 70%, transparent 100%) 1;
+}
+
+.number-stepper input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    text-align: center;
+    border: none;
+    background: transparent;
+    height: 48px;
+    color: var(--input-text);
+    transition: color 0.4s ease; /* Matches cycler-value transition */
+}
+
+.step-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px; 
+    height: 48px;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* --- Added Animation Logic --- */
+.step-btn:active .chevron-img {
+    filter: url(#audi-red-final) drop-shadow(0px 0px 1px #FF3223) !important;
+    transform: scale(1.1);
+}
+
+/* Keeps the left chevron rotated 180deg while scaling */
+.step-btn:active .chevron-img.left {
+    transform: rotate(180deg) scale(1.1);
+}
+
+/* Makes the number glow white briefly when a button is pressed */
+.step-btn:active + input, 
+.step-btn:active ~ input {
+    color: var(--text);
+}
+
+.cycler {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 25px; cursor: pointer; height: 48px;
+  color: var(--input-text); font-family: "Zurich BT", sans-serif;
+}
+
+.cycler-value {
+  font-weight: 600;
+  text-align: right;
+  color: var(--input-text); 
+  transition: color 0.4s ease;
+}
+
+.text-btn {
+    background: none; border: none; color: var(--sub); 
+    font-family: "Zurich Extended BT", sans-serif;
+    font-size: 0.85em; font-weight: 700; cursor: pointer;
+    text-transform: uppercase; text-align: right;
+}
+
+.text-btn.save:active { color: #28a745 !important; }
+.text-btn:not(.save):active { color: var(--accent) !important; }
+
+/* ---------- SCROLLBAR ---------- */
+.menu-body::-webkit-scrollbar, .content-body::-webkit-scrollbar { width: 5px; }
+.menu-body::-webkit-scrollbar-track, .content-body::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-track); border-radius: 2px; margin: 10px 0;
+}
+.menu-body::-webkit-scrollbar-thumb, .content-body::-webkit-scrollbar-thumb {
+  background-color: #ffffff; border-radius: 2px;
+}
+</style>
+</head>
+
+<body data-theme="dark">
+
+<svg style="position: absolute; width: 0; height: 0;">
+  <filter id="audi-red-final" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="0.92  0 0 0 0  0.22  0 0 0 0  0.18  0 0 0 0  0     0 0 1 0" />
+  </filter>
+</svg>
+
+<div id="menu-view">
+  <div class="header-container">
+    <div class="header-text-stack">
+        <h1>RNS-E Control</h1>
+        <div class="subhead main-subhead">Vehicle integration and system configuration</div>
+    </div>
+  </div>
+  <div class="menu-body" id="nav-list"></div>
+</div>
+
+<div id="detail-view" class="hidden">
+  <div class="header-container">
+    <div class="header-main-info">
+        <button class="back-btn" onclick="this.classList.add('clicked'); setTimeout(showMenu, 150)">
+          <img src="static/assets/icons/audi/back.png" class="back-img" alt="Back">
+        </button>
+        <div class="header-separator"></div>
+        <div class="header-text-stack">
+          <h2 id="page-title">Settings</h2>
+          <div class="subhead" id="page-desc">Description</div>
+        </div>
+        <div class="header-separator-right"></div>
+    </div>
+    <div class="header-text-actions">
+        <button class="text-btn save" onclick="save()">Save</button>
+        <button class="text-btn" onclick="undoChanges()">Cancel</button>
+    </div>
+  </div>
+  <div class="content-body" id="detail-content"></div>
+</div>
+
+<script>
+let cfg={}, descriptors={}, tzList=[];
+let activeSectionId = "";
+const $=id=>document.getElementById(id);
+const get = p => p.split(".").reduce((o, k) => (o && o[k] !== undefined) ? o[k] : null, cfg);
+const getDesc = p => descriptors[p] || "";
+const CHEVRON_IMG = '<img src="static/assets/icons/audi/chevron.png" class="chevron-img" alt="Next">';
+
+const sections = [
+  { id: 'system', title: "System", desc: "Configure device and system settings", icon: "fa-gear" },
+  { id: 'main', title: "Main Features", desc: "Toggle core functionality", icon: "fa-star" },
+  { id: 'power', title: "Power Management", desc: "Sleep and shutdown behavior", icon: "fa-bolt", path: "features.power_management" },
+  { id: 'carpihat', title: "CarPiHat", desc: "Hardware interface features", icon: "fa-microchip", path: "features.carpihat" },
+  { id: 'thresholds', title: "Thresholds", desc: "Timing parameters", icon: "fa-gauge", eng: true },
+  { id: 'engineeringMaps', title: "Engineering", desc: "Remap MMI buttons", icon: "fa-terminal", eng: true },
+  { id: 'canids', title: "CAN IDs", desc: "Define CAN identifiers", icon: "fa-network-wired", eng: true }
+];
+
+function formatLabel(key) {
+  const abbreviations = ["MMI", "RNSE", "MFSW", "CAN", "DIS", "TV", "UTC", "ID", "KLS", "KL15", "RPM", "FIS"];
+  return key.split('_').map(word => {
+    const upper = word.toUpperCase();
+    if (abbreviations.includes(upper)) return upper;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
+}
+
+function renderMenu() {
+  const eng = get("features.engineering_mode");
+  $("nav-list").innerHTML = sections.filter(s => {
+      if (!s.eng || s.id === 'power' || s.id === 'carpihat') return true;
+      return eng;
+  }).map(s => {
+      const togglePath = s.path ? `${s.path}.enabled` : null;
+      const showChevron = !togglePath || eng;
+      return `
+        <div class="nav-item" onclick="this.classList.add('clicked'); setTimeout(() => showDetail('${s.id}'), 150)">
+          <i class="fa-solid ${s.icon}"></i>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:flex-start; justify-content: center;">
+              <div class="nav-label">${s.title}</div>
+              <div class="nav-desc">${s.desc}</div>
+          </div>
+          <div class="nav-action-group">
+            ${togglePath && get(togglePath) !== null 
+              ? `<div class="toggle ${get(togglePath) ? 'on' : ''}" onclick="flip('${togglePath}', true); event.stopPropagation();"></div>` 
+              : ''}
+            ${showChevron ? CHEVRON_IMG : ''}
+          </div>
+          <div class="nav-border"></div>
+        </div>`;
+  }).join("");
+}
+
+function mapRecursive(path, obj, skipKeys = []) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return "";
+  let html = "";
+  Object.entries(obj).forEach(([key, val]) => {
+    if (skipKeys.includes(key)) return;
+    const fullPath = path ? `${path}.${key}` : key;
+    const label = formatLabel(key);
+    const desc = getDesc(fullPath);
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      if (val.hasOwnProperty('enabled')) {
+        html += rowToggle(label, `${fullPath}.enabled`, getDesc(`${fullPath}.enabled`) || desc);
+        html += mapRecursive(fullPath, val, ['enabled', ...skipKeys]);
+      } else {
+        const subContent = mapRecursive(fullPath, val, skipKeys);
+        if (subContent) { html += `<h3>${label}</h3>${subContent}`; }
+      }
+    } else {
+      if (typeof val === 'boolean') html += rowToggle(label, fullPath, desc);
+      else if (typeof val === 'number') html += rowNumber(label, fullPath, desc);
+      else if (key === 'car_time_zone') html += rowSelect(label, fullPath, tzList, desc);
+      else html += rowText(label, fullPath, desc);
+    }
+  });
+  return html;
+}
+
+function renderDetail() {
+  const id = activeSectionId;
+  const eng = get("features.engineering_mode");
+  const platforms = cfg.platforms ? Object.keys(cfg.platforms) : ["TT", "A2"];
+  let html = "";
+  if(id === 'system') {
+      html = `
+        ${rowSelect("Platform", "platform", platforms, getDesc("platform"))}
+        ${rowText("CAN Interface", "can_interface", getDesc("can_interface"))}
+        ${rowSelect("DIS Mode", "features.dis_mode", ["nav", "media", "off"], getDesc("features.dis_mode"))}
+        ${rowSelect("Time Zone", "features.car_time_zone", tzList, getDesc("features.car_time_zone"))}
+        <div class="row">
+            <div class="label-container"><div id="label-theme" class="label">Theme</div><div class="row-desc">Switch dark/light mode</div></div>
+            <div class="cycler" onclick="toggleTheme()">
+                <span class="cycler-value">${document.body.getAttribute('data-theme') === 'dark' ? 'Dark' : 'Light'}</span>
+                ${CHEVRON_IMG}
+            </div>
+            <div class="nav-border"></div>
+        </div>
+        ${rowToggle("Engineering Mode", "features.engineering_mode", getDesc("features.engineering_mode"))}
+      `;
+      setTimeout(() => { const el = $("label-theme"); if (el) checkMarquee(el, true); }, 50);
+  } else if (id === 'main') {
+      html = mapRecursive("features", cfg.features || {}, ['dis_mode', 'car_time_zone', 'engineering_mode', 'power_management', 'carpihat', 'debug_mode']);
+  } else if (id === 'power') {
+      html = mapRecursive("features.power_management", cfg.features?.power_management || [], ['enabled']);
+  } else if (id === 'carpihat') {
+      html = mapRecursive("features.carpihat", cfg.features?.carpihat || [], ['enabled']);
+  } else if (id === 'thresholds' && eng) { html = mapRecursive("thresholds", cfg.thresholds || {});
+  } else if (id === 'engineeringMaps' && eng) { html = mapRecursive("key_mappings", cfg.key_mappings || {});
+  } else if (id === 'canids' && eng) { html = mapRecursive("can_ids", cfg.can_ids || {}); }
+  $("detail-content").innerHTML = html || "<p style='text-align:center; padding-top:20px;'>No data available.</p>";
+}
+
+function rowToggle(l, p, d='') { 
+    const id = `label-${p.replace(/\./g, '-')}`;
+    setTimeout(() => { const el = $(id); if (el) checkMarquee(el, true); }, 50);
+    return `<div class="row"><div class="label-container"><div id="${id}" class="label">${l}</div><div class="row-desc">${d}</div></div><div class="toggle ${get(p) ? 'on' : ''}" onclick="flip('${p}')"></div><div class="nav-border"></div></div>`; 
+}
+
+function checkMarquee(el, isLabel = false) {
+    const parent = el.parentElement;
+    const text = isLabel ? el.innerText : el.value;
+    
+    const span = document.createElement('span');
+    span.style.font = window.getComputedStyle(el).font;
+    span.style.visibility = 'hidden';
+    span.style.whiteSpace = 'nowrap';
+    span.innerText = text;
+    document.body.appendChild(span);
+
+    const limit = isLabel ? parent.offsetWidth - 10 : 180;
+
+    if (span.offsetWidth > limit) {
+        el.classList.add('marquee-active');
+        if (isLabel) parent.classList.add('overflowing');
+    } else {
+        el.classList.remove('marquee-active');
+        if (isLabel) parent.classList.remove('overflowing');
+    }
+    document.body.removeChild(span);
+}
+
+function rowText(l, p, d='') { 
+    const val = get(p) ?? '';
+    const lid = `label-${p.replace(/\./g, '-')}`;
+    const iid = `input-${p.replace(/\./g, '-')}`;
+    setTimeout(() => { 
+        const lel = $(lid); if (lel) checkMarquee(lel, true);
+        const iel = $(iid); if (iel) checkMarquee(iel); 
+    }, 50);
+    return `
+    <div class="row">
+        <div class="label-container"><div id="${lid}" class="label">${l}</div><div class="row-desc">${d}</div></div>
+        <input id="${iid}" value="${val}" onchange="setPath('${p}', this.value); checkMarquee(this)" onblur="checkMarquee(this)" onfocus="this.classList.remove('marquee-active')">
+        <div class="nav-border"></div>
+    </div>`; 
+}
+
+function rowNumber(l, p, d='') {
+  const val = get(p) ?? 0;
+  const lid = `label-${p.replace(/\./g, '-')}`;
+  setTimeout(() => { const el = $(lid); if (el) checkMarquee(el, true); }, 50);
+  return `
+    <div class="row">
+        <div class="label-container">
+            <div id="${lid}" class="label">${l}</div>
+            <div class="row-desc">${d}</div>
+        </div>
+        <div class="number-stepper">
+            <div class="stepper-controls">
+                <button class="step-btn" onclick="stepNumber('${p}', -1)">
+                    <img src="static/assets/icons/audi/chevron.png" class="chevron-img left" alt="Down">
+                </button>
+                <input type="number" id="input-${p.replace(/\./g, '-')}" step="any" value="${val}" 
+                       onchange="setPath('${p}', Number(this.value))">
+                <button class="step-btn" onclick="stepNumber('${p}', 1)">
+                    <img src="static/assets/icons/audi/chevron.png" class="chevron-img" alt="Up">
+                </button>
+            </div>
+        </div>
+        <div class="nav-border"></div>
+    </div>`;
+}
+
+function stepNumber(path, direction) {
+    const input = document.getElementById(`input-${path.replace(/\./g, '-')}`);
+    const step = 1; 
+    
+    // Perform calculation
+    let newVal = Number(input.value) + (direction * step);
+    newVal = Math.round(newVal * 100) / 100;
+    
+    // Update UI
+    input.value = newVal;
+    setPath(path, newVal);
+    
+    // Trigger a brief "glow" on the input text to match the cycler
+    input.style.color = "var(--text)";
+    setTimeout(() => { input.style.color = ""; }, 200);
+}
+
+function rowSelect(l, p, o, d='') { 
+  const val = get(p);
+  const optionsEscaped = JSON.stringify(o).replace(/"/g, '&quot;');
+  const lid = `label-${p.replace(/\./g, '-')}`;
+  setTimeout(() => { const el = $(lid); if (el) checkMarquee(el, true); }, 50);
+  return `<div class="row"><div class="label-container"><div id="${lid}" class="label">${l}</div><div class="row-desc">${d}</div></div><div class="cycler" onclick="cycleValue('${p}', ${optionsEscaped})"><span class="cycler-value">${val || 'Not Set'}</span>${CHEVRON_IMG}</div><div class="nav-border"></div></div>`; 
+}
+
+function cycleValue(path, options) {
+  const currentVal = get(path);
+  let nextIndex = options.indexOf(currentVal) + 1;
+  if (nextIndex >= options.length || nextIndex === 0) nextIndex = 0;
+  setPath(path, options[nextIndex]);
+  renderDetail(); 
+}
+
+function setPath(p, v) { 
+    const a = p.split("."), l = a.pop(); let o = cfg; 
+    for (const k of a) { if (!o[k]) o[k] = {}; o = o[k]; }
+    o[l] = v;
+    if (p === 'features.engineering_mode') renderMenu();
+}
+
+function flip(p, fromMenu = false) { setPath(p, !get(p)); if (fromMenu) renderMenu(); else renderDetail(); }
+
+function showMenu() {
+    document.querySelectorAll('.clicked').forEach(el => el.classList.remove('clicked'));
+    $("menu-view").classList.remove("hidden");
+    $("detail-view").classList.add("hidden");
+    renderMenu();
+}
+
+function showDetail(id) {
+    document.querySelectorAll('.clicked').forEach(el => el.classList.remove('clicked'));
+    const eng = get("features.engineering_mode");
+    if (!eng && (id === 'power' || id === 'carpihat')) return; 
+    activeSectionId = id;
+    const section = sections.find(s => s.id === id);
+    $("page-title").innerText = section.title;
+    $("page-desc").innerText = section.desc;
+    $("menu-view").classList.add("hidden"); $("detail-view").classList.remove("hidden");
+    $("detail-content").scrollTop = 0;
+    renderDetail();
+}
+
+function toggleTheme() {
+    const b = document.body;
+    const t = b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    b.setAttribute('data-theme', t); localStorage.setItem('theme', t); renderDetail();
+}
+
+async function load() {
+  try { 
+      const response = await fetch("/api/config");
+      cfg = await response.json(); 
+      try { descriptors = await (await fetch("descriptors.json")).json(); } catch(e) { descriptors = {}; }
+      const tzRes = await fetch("/api/timezones");
+      tzList = tzRes.ok ? await tzRes.json() : ["UTC", "Europe/London"];
+  } catch (e) { cfg = {features:{ engineering_mode: true }}; }
+  document.body.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');
+}
+
+async function undoChanges() {
+    const cancelBtn = document.querySelector('.text-btn:not(.save)');
+    cancelBtn.style.color = "var(--accent)"; 
+    await load(); 
+    renderDetail(); 
+    setTimeout(() => { cancelBtn.style.color = ""; }, 250);
+}
+
+async function save() { 
+    const saveBtn = document.querySelector('.text-btn.save');
+    saveBtn.style.color = "#28a745"; 
+    try {
+        await fetch("/api/config", { 
+            method: "POST", 
+            headers: {"Content-Type": "application/json"}, 
+            body: JSON.stringify(cfg) 
+        });
+    } catch (e) { console.error(e); }
+    setTimeout(() => { saveBtn.style.color = ""; renderDetail(); }, 250);
+}
+
+document.addEventListener("DOMContentLoaded", () => { load().then(() => showMenu()); });
+</script>
+</body>
+</html>

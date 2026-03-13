@@ -1,0 +1,38 @@
+{
+  "rnse_root": {
+    "id": "rnse_root",
+    "title": "RNS-E Control",
+    "items": [
+      { "label": "System Config", "target": "system_detail" },
+      { "label": "Main Features", "target": "features_auto" },
+      { "label": "Power Management", "target": "power_auto" },
+      { "label": "CAN Bus IDs", "target": "can_ids", "eng": true },
+      { "label": "Key Mappings", "target": "keys_auto", "eng": true }
+    ]
+  },
+  "system_detail": {
+    "title": "System Config",
+    "parent": "rnse_root",
+    "type": "submenu",
+    "filter_type": "SYSTEM_KEYS"
+  },
+  "features_auto": {
+    "title": "Main Features",
+    "parent": "rnse_root",
+    "type": "submenu",
+    "recursive_path": "features",
+    "skip": ["power_management", "carpihat", "engineering_mode"]
+  },
+  "power_auto": {
+    "title": "Power Management",
+    "parent": "rnse_root",
+    "type": "submenu",
+    "recursive_path": "features.power_management"
+  },
+  "keys_auto": {
+    "title": "Key Mappings",
+    "parent": "rnse_root",
+    "type": "submenu",
+    "recursive_path": "key_mappings"
+  }
+}

@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>RNS-E Control</title>
+
+  <style>
+/* ---------- FONTS ---------- */
+  @font-face {
+    font-family: "Zurich BT";
+    src: url("static/assets/fonts/zurich/Zurich BT.ttf") format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Zurich BT Bold";
+    src: url("static/assets/fonts/zurich/Zurich Bold BT.ttf") format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Zurich Extended BT";
+    src: url("static/assets/fonts/zurich/Zurich Extended BT.ttf") format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Zurich Bold Extended BT";
+    src: url("static/assets/fonts/zurich/Zurich Bold Extended BT.ttf") format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+    :root {
+      --accent: #FF0000; 
+      --text-active: #FFFFFF;
+      --text-dim: #FF0000;
+      --value-border: #5a0808;
+      --row-h: 52px;
+      --canvas-width: 800px;
+      --canvas-height: 480px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background-color: #000;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    #ui-scaler {
+      width: var(--canvas-width);
+      height: var(--canvas-height);
+      position: relative;
+      overflow: hidden;
+      background-image: url('static/assets/backgrounds/wallpaper-home.png');
+      background-size: 100% 100%;
+      color: var(--text-dim);
+      font-family: "Zurich Extended BT", sans-serif;
+      transform-origin: center center;
+    }
+
+    #ui-scaler.nested {
+      background-image: url('static/assets/backgrounds/wallpaper-nested.png');
+    }
+
+    #ui-scaler.nested #detail-view {
+      top: 135px; 
+      height: 260px !important; 
+    }
+
+    /* Updated Subheader Title Styling */
+    #nested-title {
+      position: absolute;
+      top: 60px; 
+      left: 0;
+      width: 100%; /* Flex across entire screen */
+      height: 58px;
+      display: none;
+      align-items: center;
+      justify-content: center; /* Center horizontally */
+      font-family: "Zurich Bold Extended BT", sans-serif;
+      transform: scaleX(0.91);
+      letter-spacing: -0.007em;
+      font-size: 2.0em;
+      color: var(--text-active);
+      z-index: 5;
+    }
+
+    #ui-scaler.nested #nested-title {
+      display: flex;
+    }
+
+    .hidden { display: none !important; }
+
+    #header {
+      position: absolute; top: 0; left: 0; right: 0; height: 60px;
+      display: flex; justify-content: center; align-items: center; z-index: 10;
+    }
+
+    #header-title{
+      font-family: "Zurich Bold Extended BT", sans-serif;
+      font-size: 2.0em; 
+      color: var(--accent); 
+      margin: 0;
+      /* The Squeeze Logic */
+      transform: scaleX(0.97) translateX(-1px);      transform-origin: center;    /* Keeps the title centered while squeezing */
+      letter-spacing: -0.04em;      /* Adds space back between compressed letters */
+      display: inline-block;       /* Required for transform to work on div/button */
+    }
+
+    #back-btn {
+          position: absolute; 
+          left: 17px; 
+          top: 50%; 
+          font-family: "Zurich Bold Extended BT", sans-serif;
+          font-size: 1.8em;
+          color: var(--accent);
+          transform: translateY(-50%) scaleX(0.91);
+          letter-spacing: -0.007em;
+          transform-origin: left center;
+          border: none; 
+          background: transparent; 
+          cursor: pointer;
+          display: none;
+          z-index: 20;
+          outline: none;
+          /* Ensure long titles don't wrap */
+          white-space: nowrap;
+          padding: 0;
+          text-align: left;
+        }
+
+    #back-btn:focus, #back-btn:active {
+      background: transparent;
+      outline: none;
+    }
+
+
+    /* ---------- CURSOR ---------- */
+    #pointer-container {
+      position: absolute; z-index: 100; pointer-events: none;
+      display: flex; align-items: center;
+      top: 0; left: 0;
+      opacity: 0; 
+      will-change: transform;
+    }
+    #pointer-dot { width: 11px; height: 11px; background: #FFFFFF; border-radius: 50%; position: relative; }
+    #pointer-dot::after {
+      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 21px; height: 21px; border: 1.5px solid var(--accent); border-radius: 50%;
+    }
+    #pointer-line {height: 2px; background: #FFFFFF; margin-left: -5px; }
+
+    /* ---------- VIEW CONTAINERS (GRID LOCKED) ---------- */
+    #menu-view, #detail-view {
+      position: absolute; 
+      top: 83.75px; 
+      left: 36px; 
+      right: 80px; 
+      height: 312px !important; 
+      overflow: hidden;
+    }
+
+    .menu-body, .content-body {
+      height: 100%; 
+      padding-left: 120px; 
+      overflow-y: hidden; 
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---------- ROWS & ITEMS ---------- */
+    .nav-item, .row, h3 {
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between;
+    height: var(--row-h) !important;
+    min-height: var(--row-h) !important;
+    max-height: var(--row-h) !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      font-size: 1.85em; 
+      color: var(--accent);
+      white-space: nowrap; 
+      transform: scaleX(0.92); 
+      transform-origin: left center; 
+      cursor: pointer; 
+      flex-shrink: 0;
+    }
+
+    h3 { 
+      font-size: 1.1em; 
+      color: #fff; 
+      text-transform: uppercase; 
+      opacity: 0.8; 
+      font-family: "Zurich BT", sans-serif; 
+      padding-left: 10px !important;
+      cursor: default;
+    }
+
+    .nav-item.selected, .row.selected { color: var(--text-active); }
+    .nav-item.locked { cursor: default; }
+
+.arrow-right-img { 
+  width: 31px; 
+  height: 31px; 
+  object-fit: contain; 
+  position: relative; 
+  right: 0; /* Let the parent's padding handle the 1px offset */
+  flex: 0 0 auto; 
+}
+    .selected .arrow-right-img { content: url('static/assets/icons/audi/arrow_active.png'); filter: none !important; }
+    
+    .row:not(.selected) .arrow-right-img, .nav-item:not(.selected) .arrow-right-img {
+      filter: brightness(0) saturate(100%) invert(13%) sepia(95%) saturate(7483%) hue-rotate(359deg) brightness(101%) contrast(117%);
+    }
+
+.action-indicator { 
+  display: flex; 
+  align-items: center;      
+  justify-content: flex-end; 
+  flex: 0 0 auto; 
+  height: 52px;          
+  padding-right: 2px; 
+  margin-right: 0; /* Remove the margin-right: 1px you had here */
+}
+
+    /* ---------- VALUE BOXES ---------- */
+    
+.value-box {
+  background-image: url('static/assets/textures/togglebg.png');
+  border: 1px solid var(--value-border); 
+  border-radius: 6px;
+  height: 44px;             /* Fixed height */
+  padding: 0 10px;
+  color: var(--accent); 
+  font-size: 0.75em; 
+  font-weight: 700;
+  display: inline-flex; 
+  align-items: center;      /* Centers text/arrows inside the box */
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  margin-top: auto;         /* Safety centering */
+  margin-bottom: auto;      /* Safety centering */
+}
+    
+    .has-arrow .value-box { margin-right: 24px; }
+    .no-arrow .value-box { margin-right: 4px; }
+
+    .value-box span {
+      display: block; flex: 1; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .row.selected .value-box, 
+    .nav-item.selected .value-box { color: var(--text-active); }
+
+    .value-box.toggle-box { width: 80px; justify-content: center; }
+    .value-box.cycler-box { width: 180px; justify-content: space-between; gap: 4px; }
+    .value-box.number-box { width: 180px; justify-content: space-between; gap: 4px; }
+    .value-box.text-box   { width: 180px; justify-content: center; }
+
+    /* ---------- TEXT INPUT ---------- */
+    .value-box input.mmi-text {
+      width: 100%; height: 100%;
+      border: none; outline: none; background: transparent;
+      color: inherit; font: inherit; font-weight: 700;
+      text-align: center; padding: 0; margin: 0;
+      caret-color: var(--accent);
+    }
+    .row.selected .value-box input.mmi-text,
+    .nav-item.selected .value-box input.mmi-text {
+      color: var(--text-active); caret-color: var(--text-active);
+    }
+
+    /* ---------- ASSET ARROWS ---------- */
+    .asset-arrow { width: 20px; height: 26px; object-fit: fill; flex-shrink: 0; margin-left: 6px; margin-right: 6px;}
+    .asset-arrow.left { transform: rotate(180deg); }
+    .asset-arrow.down { transform: rotate(90deg); }
+
+    .row:not(.selected) .asset-arrow, .nav-item:not(.selected) .asset-arrow {
+      filter: brightness(0) saturate(100%) invert(13%) sepia(95%) saturate(7483%) hue-rotate(359deg) brightness(101%) contrast(117%);
+    }
+    .row.selected .asset-arrow, .nav-item.selected .asset-arrow { filter: brightness(0) invert(1); }
+    
+.label-container {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  margin-right: 80px;
+  cursor: pointer;
+}
+
+    /* ---------- DESCRIPTOR MODAL ---------- */
+    #desc-modal {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 440px; background: rgba(15, 15, 15, 0.98); border: 2px solid var(--accent);
+      padding: 25px; border-radius: 12px; z-index: 500; display: none;
+      box-shadow: 0 0 50px rgba(0,0,0,0.9); text-align: center;
+    }
+    #desc-modal h4 { color: #fff; margin: 0 0 12px 0; font-size: 1.3em; text-transform: uppercase; font-family: "Zurich Bold Extended BT"; }
+    #desc-modal p { color: var(--accent); margin: 0; font-size: 1.1em; line-height: 1.3; font-family: "Zurich BT"; }
+
+    #footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 60px; /* Matches your header height */
+    background: rgba(0,0,0,0.4);
+    z-index: 10;
+}
+
+#cancel-btn, #save-btn {
+    position: absolute;
+    top: 50%;
+    font-family: "Zurich Bold Extended BT", sans-serif;
+    font-size: 1.8em;
+    color: var(--accent);
+    /* Mirroring your exact squeeze and centering logic */
+    transform: translateY(-50%) scaleX(0.91);
+    letter-spacing: -0.007em;
+    
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+    white-space: nowrap;
+    padding: 0;
+}
+
+#cancel-btn {
+    left: 17px; /* Same horizontal offset as back-btn */
+    transform-origin: left center;
+    text-align: left;
+}
+
+#save-btn {
+    right: 17px; /* Mirrored on the right side */
+    transform-origin: right center;
+    text-align: right;
+}
+
+  </style>
+</head>
+
+<body>
+<div id="ui-scaler">
+  <div id="header">
+    <button id="back-btn" onclick="showMenu()">Back</button>
+    <div id="header-title">RNS-E Control</div>
+  </div>
+  <div id="nested-title"></div>
+  
+  <div id="pointer-container"><div id="pointer-dot"></div><div id="pointer-line"></div></div>
+  <div id="menu-view"><div class="menu-body" id="nav-list"></div></div>
+  <div id="detail-view" class="hidden"><div class="content-body" id="detail-content"></div></div>
+
+  <div id="desc-modal" onclick="closeDesc()">
+      <h4 id="desc-title">SETTING</h4>
+      <p id="desc-text"></p>
+  </div>
+  <div id="footer">
+      <button id="cancel-btn" onclick="undoChanges()">Cancel</button>
+      <button id="save-btn" onclick="save()">Save</button>
+  </div>
+</div>
+</div>
+
+<script>
+const tuning = { sensitivity: 15, minVelocity: 5, lockout: 60, idleReset: 10 };
+let scaleFactor = 1, cfg = {}, descriptors = {}, tzList = [], activeSectionId = "";
+let globalIdx = 0, viewOffset = 0, scrollBucket = 0, lastEventTime = 0, lastVelocity = 0, lastDir = 0, isLocked = false;
+let currentSubCategory = null; 
+const coords = [];
+const nestedCoords = []; 
+const $ = id => document.getElementById(id);
+
+const sections = [
+  { id: 'system', title: "System", path: "" },
+  { id: 'main', title: "Main Features", path: "features" },
+  { id: 'power', title: "Power Management", path: "features.power_management", gated: true },
+  { id: 'carpihat', title: "CarPiHat", path: "features.carpihat", gated: true },
+  { id: 'thresholds', title: "Thresholds", path: "thresholds", eng: true },
+  { id: 'keyMaps', title: "Key Mappings", path: "key_mappings", eng: true },
+  { id: 'canids', title: "CAN IDs", path: "can_ids", eng: true }
+];
+
+const engineeringMenus = {
+  engineering: [
+    { id: 'eng_mmi', title: 'MMI' },
+    { id: 'eng_mfsw', title: 'MFSW' },
+    { id: 'eng_source', title: 'Source Data' }
+  ],
+  eng_mmi: [
+    { id: 'eng_mmi_short', title: 'Short' },
+    { id: 'eng_mmi_long', title: 'Long' },
+    { id: 'eng_mmi_extended', title: 'Extended' },
+    { id: 'eng_mmi_scroll', title: 'Scroll' }
+  ],
+  eng_mfsw: [
+    { id: 'eng_mfsw_cmd', title: 'Commands' },
+    { id: 'eng_mfsw_map', title: 'Mappings' }
+  ]
+};
+
+function initCoords() {
+  coords.length = 0;
+  nestedCoords.length = 0;
+  for (let i = 0; i < 6; i++) {
+    // Main Menu Y (starts at 83px)
+    const y = 83.75 + (i * 52) + 26 - 5.5;
+    const dy = Math.abs(y - 233);
+    // X calculation remains the same to follow the screen curvature
+    const x = (417 - Math.sqrt((320**2) - (Math.min(319, dy)**2))) - 20.5;
+    coords.push({x, y});
+
+    // Nested Menu Y: Shifted down by exactly one row (52px)
+    // This makes row 0 of the nested menu sit where row 1 of the main menu was
+    const yNested = y + 52; 
+    const dyNested = Math.abs(yNested - 233);
+    const xNested = (417 - Math.sqrt((320**2) - (Math.min(319, dyNested)**2))) - 20.5;
+    nestedCoords.push({x: xNested, y: yNested});
+  }
+}
+
+function updateUI() {
+  const isMenu = !$("menu-view").classList.contains("hidden");
+  const container = isMenu ? $("nav-list") : $("detail-content");
+  const items = container.querySelectorAll('.nav-item, .row, h3');
+  const isNested = $("ui-scaler").classList.contains("nested");
+  
+  if (items.length === 0) { 
+    $("pointer-container").style.opacity = "0"; 
+    return; 
+  }
+  
+  items.forEach((item, i) => item.classList.toggle('selected', i === globalIdx));
+  
+  // Use the 52px fixed height to prevent 1px jitter
+  container.scrollTop = Math.max(0, viewOffset * 52);
+  
+  let localIdx = globalIdx - viewOffset;
+  const p = isNested ? (nestedCoords[localIdx] || {x: 0, y: 0}) : (coords[localIdx] || {x: 0, y: 0});
+
+  // anchorX should be the HIGHEST x value in your coords array (~117.5)
+  const anchorX = 117.5; 
+  const baseWidth = 17;
+  
+  // This calculates how far the dot has moved LEFT of the peak
+  const drift = anchorX - p.x;
+
+  // We set the width to 32px PLUS whatever distance it drifted left
+  $("pointer-line").style.width = `${baseWidth + drift}px`;
+
+  $("pointer-container").style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
+  $("pointer-container").style.opacity = "1";
+}
+
+function move(dir) {
+  if ($("desc-modal").style.display === "block") return;
+  const isMenu = !$("menu-view").classList.contains("hidden");
+  const container = isMenu ? $("nav-list") : $("detail-content");
+  const items = container.querySelectorAll('.nav-item, .row, h3');
+  const maxVisible = isMenu ? 6 : 5;
+  let next = globalIdx + dir;
+  if (next < 0 || next >= items.length) return;
+  globalIdx = next;
+  if (globalIdx < viewOffset) viewOffset = globalIdx;
+  else if (globalIdx >= viewOffset + maxVisible) viewOffset = globalIdx - (maxVisible - 1);
+  updateUI();
+}
+
+function syncCursorToElement(el) {
+  const container = !$("menu-view").classList.contains("hidden") ? $("nav-list") : $("detail-content");
+  const items = Array.from(container.querySelectorAll('.nav-item, .row'));
+  const index = items.indexOf(el);
+  if (index !== -1) { 
+    const alreadySelected = (globalIdx === index);
+    globalIdx = index; 
+    updateUI();
+    return alreadySelected;
+  }
+  return false;
+}
+
+window.addEventListener('wheel', e => {
+  const now = performance.now();
+  const velocity = Math.abs(e.deltaY);
+  const currentDir = Math.sign(e.deltaY);
+  if (currentDir !== lastDir || (now - lastEventTime > tuning.idleReset)) { scrollBucket = 0; lastDir = currentDir; }
+  if (isLocked || (velocity < lastVelocity && velocity < 30)) { lastEventTime = now; return; }
+  lastVelocity = velocity; lastEventTime = now;
+  if (velocity < tuning.minVelocity) return;
+  scrollBucket += e.deltaY;
+  if (Math.abs(scrollBucket) >= tuning.sensitivity) {
+    move(scrollBucket > 0 ? 1 : -1);
+    scrollBucket = 0; isLocked = true;
+    setTimeout(() => { isLocked = false; lastVelocity = 0; }, velocity > 80 ? tuning.lockout * 0.8 : tuning.lockout);
+  }
+}, { passive: true });
+
+window.addEventListener('keydown', (e) => {
+  const container = !$("menu-view").classList.contains("hidden") ? $("nav-list") : $("detail-content");
+  const items = container.querySelectorAll('.nav-item, .row, h3');
+  const selected = items[globalIdx];
+  if (e.key === 'ArrowUp') { move(-1); e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { move(1); e.preventDefault(); }
+  else if (e.key === 'Enter' && selected) { 
+    if (selected.classList.contains('nav-item')) selected.click();
+    else if (selected.classList.contains('row')) openDesc(selected.dataset.path, selected.querySelector('.label').innerText);
+    e.preventDefault(); 
+  }
+  else if (e.key === 'Escape') { 
+    if($("desc-modal").style.display === "block") closeDesc();
+    else showMenu(); 
+    e.preventDefault(); 
+  }
+  else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && selected?.dataset.mode) {
+    handleStep(selected.dataset.path, selected.dataset.mode, e.key === 'ArrowRight' ? 1 : -1, selected);
+    e.preventDefault();
+  }
+});
+
+function openDesc(path, label) {
+  if (!path) return;
+  $("desc-title").innerText = label.toUpperCase();
+  $("desc-text").innerText = descriptors[path] || "No description available.";
+  $("desc-modal").style.display = "block";
+}
+function closeDesc() { $("desc-modal").style.display = "none"; }
+
+const safeGet = (p, d = null) => p ? p.split(".").reduce((o, k) => (o && o[k] !== undefined) ? o[k] : null, cfg) ?? d : d;
+const setPath = (p, v) => { 
+  const a = p.split("."), l = a.pop(); let o = cfg; 
+  for (const k of a) { if (!o[k]) o[k] = {}; o = o[k]; }
+  o[l] = v;
+};
+
+function handleRowClick(el, path, label) {
+  if (syncCursorToElement(el)) openDesc(path, label);
+}
+
+function handleBoxClick(e, boxEl) {
+  e.stopPropagation(); 
+  const row = boxEl.closest('.row, .nav-item');
+  syncCursorToElement(row);
+  
+  const path = boxEl.dataset.path || row.dataset.path;
+  const mode = boxEl.dataset.mode || row.dataset.mode;
+
+  if (mode === 'text') {
+    const input = boxEl.querySelector('input.mmi-text');
+    if (input) { input.focus(); input.select?.(); }
+    return;
+  }
+
+  if (mode === 'toggle') {
+    setPath(path, !safeGet(path));
+    activeSectionId ? renderDetail(activeSectionId) : renderMenu();
+    return;
+  }
+
+  // Detect direction: if the clicked element (e.target) is the left arrow
+  const isLeft = e.target.classList.contains('left');
+  const delta = isLeft ? -1 : 1;
+  
+  handleStep(path, mode, delta, row);
+}
+
+function handleStep(path, mode, delta, el) {
+  if (mode === 'toggle') setPath(path, !safeGet(path));
+else if (mode === 'number') {
+  let current = Number(safeGet(path));
+  if (isNaN(current)) current = 0;
+
+  // Determine step size from precision of current value
+  let step = 1;
+  const str = current.toString();
+  if (str.includes('.')) {
+    step = Math.pow(10, -str.split('.')[1].length);
+  }
+
+  let next = current + delta * step;
+
+  // Fix floating point drift
+  const precision = step < 1 ? Math.abs(Math.log10(step)) : 0;
+  next = Number(next.toFixed(precision));
+
+  setPath(path, next);
+}
+
+
+  else if (mode === 'dropdown') {
+    const options = JSON.parse(el.getAttribute('data-options') || "[]");
+    let idx = options.indexOf(safeGet(path)) + delta;
+    if (idx >= options.length) idx = 0;
+    if (idx < 0) idx = options.length - 1;
+    setPath(path, options[idx]);
+  }
+  renderDetail(activeSectionId);
+}
+
+function rowItem(label, path, mode, options = []) {
+  const val = safeGet(path);
+  let boxClass = mode === 'toggle' ? "toggle-box" : mode === 'dropdown' ? "cycler-box" : mode === 'number' ? "number-box" : "text-box";
+  const arrowActive = 'static/assets/icons/audi/arrow_active.png';
+  let contentHtml = "";
+  if (mode === 'toggle') contentHtml = `<span>${val === true ? 'On' : 'Off'}</span>`;
+  else if (mode === 'dropdown') contentHtml = `<img src="${arrowActive}" class="asset-arrow down"><span>${val || '...'}</span>`;
+  else if (mode === 'number') contentHtml = `<img src="${arrowActive}" class="asset-arrow left"><span>${val ?? '0'}</span><img src="${arrowActive}" class="asset-arrow">`;
+  else if (mode === 'text') contentHtml = `<input class="mmi-text" value="${(val ?? "").toString().replace(/"/g, "&quot;")}" onclick="event.stopPropagation()" onfocus="syncCursorToElement(this.closest('.row'))" onchange="setPath('${path}', this.value)">`;
+  const optAttr = options.length > 0 ? `data-options='${JSON.stringify(options).replace(/'/g, "&apos;")}'` : "";
+  return `<div class="row no-arrow" data-path="${path}" data-mode="${mode}" onclick="handleRowClick(this, '${path}', '${label}')" ${optAttr}>
+      <div class="label-container"><span class="label">${label}</span></div>
+      <div class="action-indicator"><div class="value-box ${boxClass}" data-path="${path}" data-mode="${mode}" onclick="handleBoxClick(event, this)">${contentHtml}</div></div>
+    </div>`;
+}
+
+function renderMenu() {
+  const eng = safeGet("features.engineering_mode", false);
+  $("nav-list").innerHTML = sections.filter(s => !s.eng || eng).map(s => {
+    const togglePath = (s.id === 'power' || s.id === 'carpihat') ? `${s.path}.enabled` : null;
+    const canNavigate = !s.gated || eng;
+    const indicatorClass = (canNavigate && (s.id !== 'system' && s.id !== 'main' ? true : !togglePath)) ? 'has-arrow' : 'no-arrow';
+    return `<div class="nav-item ${!canNavigate ? 'locked' : ''} ${indicatorClass}" onclick="if(syncCursorToElement(this) && ${canNavigate}) showDetail('${s.id}')">
+        <div class="label-container"><span class="label">${s.title}</span></div>
+        <div class="action-indicator">
+          ${togglePath ? `<div class="value-box toggle-box" data-path="${togglePath}" data-mode="toggle" onclick="handleBoxClick(event, this)"><span>${safeGet(togglePath) ? 'On' : 'Off'}</span></div>` : ''}
+          ${indicatorClass === 'has-arrow' ? `<img src="static/assets/icons/audi/arrow.png" class="arrow-right-img">` : ''}
+        </div>
+      </div>`;
+  }).join("");
+  updateUI();
+}
+
+function formatLabel(k) {
+  const ab = ["MMI", "RNSE", "MFSW", "CAN", "DIS", "TV", "UTC", "ID", "KLS", "KL15", "RPM", "FIS"];
+  return k.split('_').map(w => ab.includes(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function getOptionsForKey(key) {
+  if ((key === 'car_time_zone' || key === 'time_zone') && Array.isArray(tzList)) {
+    return tzList;
+  }
+  
+  if (key === 'platform' && cfg.platforms && typeof cfg.platforms === 'object') {
+    return Object.keys(cfg.platforms);
+  }
+
+  const desc = descriptors?.[key];
+  if (desc?.options) return desc.options;
+
+  return [];
+}
+
+function mapRecursive(path, obj, skipKeys = []) {
+  if (!obj || typeof obj !== 'object') return "";
+  let html = "";
+  Object.entries(obj).forEach(([key, val]) => {
+    if (skipKeys.includes(key)) return;
+    const fullPath = path ? `${path}.${key}` : key;
+    
+    // Ensure the key itself is formatted for acronyms
+    const label = formatLabel(key); 
+    
+    if (val !== null && typeof val === 'object') {
+      if (Array.isArray(val)) {
+        val.forEach((item, i) => {
+          const itemPath = `${fullPath}.${i}`;
+          // Use formatLabel even for indexed array items
+          const itemLabel = formatLabel(`${key}_${i + 1}`); 
+          if (item !== null && typeof item === 'object') {
+            const sub = mapRecursive(itemPath, item, []);
+            if (sub && sub.trim()) html += `<h3>${itemLabel}</h3>` + sub;
+          } else {
+            let mode = typeof item === 'boolean' ? 'toggle' : typeof item === 'number' ? 'number' : 'text';
+            html += rowItem(itemLabel, itemPath, mode, []);
+          }
+        });
+        return;
+      }
+      if (val.hasOwnProperty('enabled') && path !== "") {
+        html += rowItem(label, `${fullPath}.enabled`, 'toggle');
+        html += mapRecursive(fullPath, val, ['enabled']);
+      } else {
+        const sub = mapRecursive(fullPath, val, []);
+        if (sub && sub.trim()) html += `<h3>${label}</h3>` + sub;
+      }
+    } 
+    else {
+      let mode = typeof val === 'boolean' ? 'toggle' : typeof val === 'number' ? 'number' : getOptionsForKey(key).length ? 'dropdown' : 'text';
+      html += rowItem(label, fullPath, mode, getOptionsForKey(key));
+    }
+  });
+  return html;
+}
+
+window.setSubCat = function(catId) {
+  currentSubCategory = catId; globalIdx = 0; viewOffset = 0;
+  const categories = [ /* ... your existing categories ... */ ];
+  const cat = categories.find(c => c.id === catId);
+  
+  // Apply formatLabel to the subcategory title
+  if (cat) $("nested-title").innerText = formatLabel(cat.title);
+  
+  renderDetail('keyMaps');
+};
+
+function renderDetail(id) {
+  const eng = safeGet("features.engineering_mode", false);
+  if (!eng && (id === 'power' || id === 'carpihat' || id === 'thresholds' || id === 'keyMaps' || id === 'canids')) {
+    $("detail-content").innerHTML = "<h3>Access Denied</h3>";
+    updateUI();
+    return;
+  }
+  const pageRenderers = {
+    main: () => mapRecursive("features", cfg.features || {}, ["dis_mode","car_time_zone","engineering_mode","power_management","carpihat"]),
+    power: () => mapRecursive("features.power_management", cfg.features?.power_management || {}, ["enabled"]),
+    carpihat: () => mapRecursive("features.carpihat", cfg.features?.carpihat || {}, ["enabled"]),
+    thresholds: () => mapRecursive("thresholds", cfg.thresholds || {}),
+    keyMaps: () => {
+  const categories = [
+    { id: 'mmi_short', title: 'MMI Short Press', path: 'key_mappings.mmi_short' },
+    { id: 'mmi_long', title: 'MMI Long Press', path: 'key_mappings.mmi_long' },
+    { id: 'mmi_extended', title: 'MMI Extended', path: 'key_mappings.mmi_extended' },
+    { id: 'mmi_scroll', title: 'MMI Scroll', path: 'mmi_scroll_commands' },
+    { id: 'mfsw_cmd', title: 'MFSW Commands', path: 'key_mappings.mfsw_commands' },
+    { id: 'mfsw_map', title: 'MFSW Mappings', path: 'key_mappings.mfsw' },
+    { id: 'src_data', title: 'Source Data', path: 'source_data' }
+  ];
+
+  if (currentSubCategory) {
+    const cat = categories.find(c => c.id === currentSubCategory);
+    
+    // Update the large top title
+    $("nested-title").innerText = formatLabel(cat.title); 
+    
+    const data = safeGet(cat.path);
+    
+    // REMOVED: The <h3> tag has been removed to stop showing the small redundant title
+    return mapRecursive(cat.path, data || {}); 
+  }
+  
+  // Apply formatLabel here so the buttons also show correct acronym capitalization
+  return categories.map(cat => `<div class="nav-item has-arrow" onclick="setSubCat('${cat.id}')">
+      <div class="label-container"><span class="label">${formatLabel(cat.title)}</span></div>
+      <div class="action-indicator"><img src="static/assets/icons/audi/arrow.png" class="arrow-right-img"></div>
+    </div>`).join("");
+},
+    canids: () => mapRecursive("can_ids", cfg.can_ids || {}),
+    system: () => ["platform", "can_interface", "features.dis_mode", "features.car_time_zone", "features.engineering_mode"].map(path => {
+        const parts = path.split("."), key = parts.pop();
+        const obj = parts.reduce((o,p)=>o?.[p], cfg);
+        if (obj?.[key] === undefined) return "";
+        return rowItem(formatLabel(key), path, typeof obj[key] === 'boolean' ? 'toggle' : (getOptionsForKey(key).length > 0 ? 'dropdown' : 'text'), getOptionsForKey(key));
+      }).join("")
+  };
+  $("detail-content").innerHTML = pageRenderers[id]?.() || "<h3>No Data</h3>";
+  updateUI();
+}
+
+function showDetail(id) {
+  activeSectionId = id; globalIdx = 0; viewOffset = 0;
+  const section = sections.find(s => s.id === id);
+  
+  // Use formatLabel to preserve acronyms instead of forcing lowercase
+  if (section) $("nested-title").innerText = formatLabel(section.title);
+  
+  $("ui-scaler").classList.add("nested");
+  $("menu-view").classList.add("hidden");
+  $("detail-view").classList.remove("hidden");
+  $("back-btn").style.display = "block";
+  renderDetail(id);
+}
+
+function showMenu() {
+  if (activeSectionId === 'keyMaps' && currentSubCategory) {
+    currentSubCategory = null; 
+    globalIdx = 0; 
+    viewOffset = 0;
+    const section = sections.find(s => s.id === 'keyMaps');
+    
+    // Maintain the acronym-aware formatting we set up earlier
+    $("nested-title").innerText = formatLabel(section.title);
+    
+    renderDetail('keyMaps'); 
+    return;
+  }
+  
+  // Transition back to main menu
+  $("ui-scaler").classList.remove("nested");
+  activeSectionId = ""; 
+  globalIdx = 0; 
+  viewOffset = 0;
+  
+  $("detail-view").classList.add("hidden"); 
+  $("menu-view").classList.remove("hidden");
+  $("back-btn").style.display = "none";
+  
+  renderMenu();
+  
+  // Force the UI to clear any old highlights and reset the pointer
+  updateUI(); 
+}
+
+function handleResize() {
+  scaleFactor = Math.min(window.innerWidth / 800, window.innerHeight / 480);
+  $("ui-scaler").style.transform = `scale(${scaleFactor})`;
+}
+
+async function undoChanges() {
+    // Optional: Visual feedback (pulse color)
+    const btn = document.getElementById('cancel-btn');
+    btn.style.color = "#fff";
+    
+    try {
+        const response = await fetch("/api/config");
+        cfg = await response.json(); 
+        renderDetail(activeSectionId); // Refresh UI with server data
+    } catch (e) {
+        console.error("Undo failed:", e);
+    }
+    
+    setTimeout(() => { btn.style.color = "var(--accent)"; }, 200);
+}
+
+async function save() {
+    const btn = document.getElementById('save-btn');
+    btn.style.color = "#fff";
+
+    try {
+        await fetch("/api/config", { 
+            method: "POST", 
+            headers: {"Content-Type": "application/json"}, 
+            body: JSON.stringify(cfg) 
+        });
+    } catch (e) {
+        console.error("Save failed:", e);
+        btn.style.color = "red";
+    }
+
+    setTimeout(() => { btn.style.color = "var(--accent)"; }, 200);
+}
+
+async function init() {
+  try { 
+    cfg = await (await fetch("/api/config")).json();
+    tzList = await (await fetch("/api/timezones")).json();
+    descriptors = await (await fetch("descriptors.json")).json();
+  } catch(e) { 
+    cfg = { platform: "TT", can_interface: "can0", features: { engineering_mode: true, power_management: { enabled: true, timer: 30 } } }; 
+    tzList = ["UTC", "London"]; 
+  }
+  handleResize(); initCoords(); renderMenu();
+}
+
+window.addEventListener('resize', handleResize);
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

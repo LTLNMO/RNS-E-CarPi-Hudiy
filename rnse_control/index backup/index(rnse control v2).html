@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>RNS-E Control Optimized</title>
+
+  <style>
+/* ---------- FONTS ---------- */
+  @font-face {
+    font-family: "Zurich BT";
+    src: url("static/assets/fonts/zurich/Zurich BT.ttf") format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Zurich BT Bold";
+    src: url("static/assets/fonts/zurich/Zurich Bold BT.ttf") format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Zurich Extended BT";
+    src: url("static/assets/fonts/zurich/Zurich Extended BT.ttf") format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Zurich Bold Extended BT";
+    src: url("static/assets/fonts/zurich/Zurich Bold Extended BT.ttf") format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+    :root {
+      --accent: #FF0000; 
+      --text-active: #FFFFFF;
+      --text-dim: #FF0000;
+      --value-border: #5a0808;
+      --row-h: 52px;
+      --canvas-width: 800px;
+      --canvas-height: 480px;
+    }
+
+    /* PREVENT TEXT SELECTION GLOBALLY */
+    * { 
+      box-sizing: border-box; 
+      -webkit-tap-highlight-color: transparent; 
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    /* Enable selection only for text inputs */
+    input.mmi-text {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background-color: #000;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    #ui-scaler {
+      width: var(--canvas-width);
+      height: var(--canvas-height);
+      position: relative;
+      overflow: hidden;
+      background-image: url('static/assets/backgrounds/wallpaper-home.png');
+      background-size: 100% 100%;
+      color: var(--text-dim);
+      font-family: "Zurich Extended BT", sans-serif;
+      transform-origin: center center;
+    }
+
+    #ui-scaler.nested { background-image: url('static/assets/backgrounds/wallpaper-nested.png'); }
+    #ui-scaler.nested #detail-view { top: 135px; height: 260px !important; }
+
+    #nested-title {
+      position: absolute;
+      top: 60px; left: 0;
+      width: 100%; height: 58px;
+      display: none; align-items: center; justify-content: center;
+      font-family: "Zurich Bold Extended BT", sans-serif;
+      transform: scaleX(0.91); letter-spacing: -0.007em;
+      font-size: 2.0em; color: var(--text-active); z-index: 5;
+    }
+
+    #ui-scaler.nested #nested-title { display: flex; }
+    .hidden { display: none !important; }
+
+    #header {
+      position: absolute; top: 0; left: 0; right: 0; height: 60px;
+      display: flex; justify-content: center; align-items: center; z-index: 10;
+    }
+
+    #header-title{
+      font-family: "Zurich Bold Extended BT", sans-serif;
+      font-size: 2.0em; color: var(--accent); margin: 0;
+      transform: scaleX(0.97) translateX(-1px); transform-origin: center;
+      letter-spacing: -0.04em; display: inline-block;
+    }
+
+    #back-btn, #cancel-btn, #save-btn {
+      position: absolute; top: 50%;
+      font-family: "Zurich Bold Extended BT", sans-serif;
+      font-size: 1.8em; color: var(--accent);
+      transform: translateY(-50%) scaleX(0.91);
+      letter-spacing: -0.007em; border: none;
+      background: transparent; cursor: pointer;
+      outline: none; white-space: nowrap; padding: 0; z-index: 20;
+    }
+
+    #back-btn, #cancel-btn { left: 17px; transform-origin: left center; text-align: left; }
+    #save-btn { right: 17px; transform-origin: right center; text-align: right; }
+    #back-btn { display: none; }
+
+    /* ---------- CURSOR ---------- */
+    #pointer-container {
+      position: absolute; z-index: 100; pointer-events: none;
+      display: flex; align-items: center;
+      top: 0; left: 0; opacity: 0; will-change: transform;
+    }
+    #pointer-dot { width: 11px; height: 11px; background: #FFFFFF; border-radius: 50%; position: relative; }
+    #pointer-dot::after {
+      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 21px; height: 21px; border: 1.5px solid var(--accent); border-radius: 50%;
+    }
+    #pointer-line { width: 11px; height: 2px; background: #FFFFFF; margin-left: -5px; transform-origin: left center; will-change: transform; }
+
+    /* ---------- VIEW CONTAINERS ---------- */
+    #menu-view, #detail-view {
+      position: absolute; top: 83.75px; left: 36px; right: 80px; height: 312px !important; 
+      overflow: hidden; contain: layout style;
+    }
+
+    .menu-body, .content-body {
+      height: 100%; padding-left: 120px; overflow-y: hidden; 
+      display: flex; flex-direction: column; will-change: scroll-position;
+    }
+
+    /* ---------- ROWS ---------- */
+    .nav-item, .row, h3 {
+      display: flex; align-items: center; justify-content: space-between;
+      height: var(--row-h) !important; min-height: var(--row-h) !important;
+      max-height: var(--row-h) !important; margin: 0 !important; padding: 0 !important;
+      font-size: 1.85em; color: var(--accent); white-space: nowrap; 
+      transform: scaleX(0.92); transform-origin: left center; 
+      cursor: pointer; flex-shrink: 0;
+    }
+
+    h3 { 
+      font-size: 1.1em; color: #fff; text-transform: uppercase; opacity: 0.8; 
+      font-family: "Zurich BT", sans-serif; padding-left: 10px !important; cursor: default;
+    }
+
+    .nav-item.selected, .row.selected { color: var(--text-active); }
+    .nav-item.locked { cursor: default; }
+
+    .arrow-right-img { width: 31px; height: 31px; object-fit: contain; position: relative; right: 0; flex: 0 0 auto; }
+    .selected .arrow-right-img { content: url('static/assets/icons/audi/arrow_active.png'); filter: none !important; }
+    
+    .action-indicator { display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; height: 52px; padding-right: 2px; }
+
+    /* ---------- VALUE BOXES ---------- */
+    .value-box {
+      background-image: url('static/assets/textures/togglebg.png');
+      border: 1px solid var(--value-border); border-radius: 6px;
+      height: 44px; padding: 0 10px; color: var(--accent); 
+      font-size: 0.75em; font-weight: 700; display: inline-flex; 
+      align-items: center; justify-content: center; overflow: hidden;
+      cursor: pointer; margin-top: auto; margin-bottom: auto;
+    }
+    
+    .has-arrow .value-box { margin-right: 24px; }
+    .no-arrow .value-box { margin-right: 4px; }
+    .value-box span { display: block; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row.selected .value-box, .nav-item.selected .value-box { color: var(--text-active); }
+    .value-box.toggle-box { width: 80px; }
+    .value-box.cycler-box, .value-box.number-box { width: 180px; justify-content: space-between; gap: 4px; }
+    .value-box.text-box { width: 180px; justify-content: center; }
+
+    .value-box input.mmi-text {
+      width: 100%; height: 100%; border: none; outline: none; background: transparent;
+      color: inherit; font: inherit; font-weight: 700; text-align: center; padding: 0; margin: 0;
+    }
+
+    .asset-arrow { width: 20px; height: 26px; object-fit: fill; flex-shrink: 0; margin: 0 6px; }
+    .asset-arrow.left { transform: rotate(180deg); }
+    .asset-arrow.down { transform: rotate(90deg); }
+
+    .row:not(.selected) .arrow-right-img, .nav-item:not(.selected) .arrow-right-img, 
+    .row:not(.selected) .asset-arrow, .nav-item:not(.selected) .asset-arrow {
+      filter: brightness(0) saturate(100%) invert(13%) sepia(95%) saturate(7483%) hue-rotate(359deg) brightness(101%) contrast(117%);
+    }
+
+    .row.selected .asset-arrow, .nav-item.selected .asset-arrow { filter: brightness(0) invert(1); }
+    .label-container { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; margin-right: 80px; cursor: pointer; }
+
+    #desc-modal {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 440px; background: rgba(15, 15, 15, 0.98); border: 2px solid var(--accent);
+      padding: 25px; border-radius: 12px; z-index: 500; display: none;
+      text-align: center; box-shadow: 0 0 40px rgba(0,0,0,0.8);
+    }
+    #desc-modal h4 { color: #fff; margin: 0 0 12px 0; font-size: 1.3em; font-family: "Zurich Bold Extended BT"; }
+    #desc-modal p { color: var(--accent); margin: 0; font-size: 1.1em; line-height: 1.3; font-family: "Zurich BT"; }
+
+    #footer { position: absolute; bottom: 0; width: 100%; height: 60px; background: rgba(0,0,0,0.4); z-index: 10; }
+  </style>
+</head>
+
+<body>
+<div id="ui-scaler">
+  <div id="header">
+    <button id="back-btn" onclick="showMenu()">Back</button>
+    <div id="header-title">RNS-E Control</div>
+  </div>
+  <div id="nested-title"></div>
+  
+  <div id="pointer-container"><div id="pointer-dot"></div><div id="pointer-line"></div></div>
+  <div id="menu-view"><div class="menu-body" id="nav-list"></div></div>
+  <div id="detail-view" class="hidden"><div class="content-body" id="detail-content"></div></div>
+
+  <div id="desc-modal" onclick="closeDesc()">
+      <h4 id="desc-title">SETTING</h4>
+      <p id="desc-text"></p>
+  </div>
+  <div id="footer">
+      <button id="cancel-btn" onclick="undoChanges()">Cancel</button>
+      <button id="save-btn" onclick="save()">Save</button>
+  </div>
+</div>
+
+<script>
+/* ---------- CONFIG & STATE ---------- */
+const tuning = { sensitivity: 15, minVelocity: 5, lockout: 60, idleReset: 10 };
+const CURVE_CENTER_Y = 233, CURVE_RADIUS = 320, CURVE_OFFSET_X = 417;
+const ACRONYMS = ["MMI", "RNSE", "MFSW", "CAN", "DIS", "TV", "UTC", "ID", "KLS", "KL15", "RPM", "FIS"];
+
+let cfg = {}, descriptors = {}, tzList = [], activeSectionId = "";
+let globalIdx = 0, viewOffset = 0, scrollBucket = 0, lastEventTime = 0, isLocked = false;
+let currentSubCategory = null; 
+
+let cachedItems = [], cachedContainer = null;
+let ticking = false;
+let lastNavTime = 0; 
+
+// Long Press States
+let holdTimer = null;
+let isHoldTriggered = false;
+const HOLD_DURATION = 600;
+
+/* ---------- COORDINATE CACHE ---------- */
+const getCoords = (idx, isNested) => {
+    const baseTop = isNested ? 135.75 : 83.75; 
+    const y = baseTop + (idx * 52) + 20.5;
+    const dy = Math.abs(y - 233); 
+    const x = (417 - Math.sqrt(Math.max(0, Math.pow(320, 2) - Math.pow(Math.min(320, dy), 2)))) - 20.5;
+    const drift = 117.5 - x;
+    const baseLineWidth = 11; 
+    const totalNeededWidth = baseLineWidth + drift + 5;
+    const scale = totalNeededWidth / baseLineWidth;
+
+    return { 
+        y, 
+        containerTransform: `translate3d(${x}px, ${y}px, 0)`, 
+        lineTransform: `scaleX(${scale})`,
+        lineOrigin: `0% 50%` 
+    };
+};
+
+const menuCache = Array.from({ length: 20 }, (_, i) => getCoords(i, false));
+const nestedCache = Array.from({ length: 20 }, (_, i) => getCoords(i, true));
+
+const $ = id => document.getElementById(id);
+
+const sections = [
+  { id: 'system', title: "System", path: "" },
+  { id: 'main', title: "Main Features", path: "features" },
+  { id: 'power', title: "Power Management", path: "features.power_management", gated: true },
+  { id: 'carpihat', title: "CarPiHat", path: "features.carpihat", gated: true },
+  { id: 'thresholds', title: "Thresholds", path: "thresholds", eng: true },
+  { id: 'keyMaps', title: "Key Mappings", path: "key_mappings", eng: true },
+  { id: 'canids', title: "CAN IDs", path: "can_ids", eng: true }
+];
+
+const KEYMAP_CATEGORIES = [
+  { id: 'mmi_short',    title: 'MMI Short Press',  path: 'key_mappings.mmi_short' },
+  { id: 'mmi_long',     title: 'MMI Long Press',   path: 'key_mappings.mmi_long' },
+  { id: 'mmi_extended', title: 'MMI Extended',     path: 'key_mappings.mmi_extended' },
+  { id: 'mmi_scroll',   title: 'MMI Scroll',       path: 'mmi_scroll_commands' },
+  { id: 'mfsw_cmd',     title: 'MFSW Commands',    path: 'key_mappings.mfsw_commands' },
+  { id: 'mfsw_map',     title: 'MFSW Mappings',    path: 'key_mappings.mfsw' },
+  { id: 'src_data',     title: 'Source Data',      path: 'source_data' }
+];
+
+/* ---------- HOLD LOGIC ---------- */
+function startHold(path, label) {
+  clearHold();
+  isHoldTriggered = false;
+  if (!path) return;
+  holdTimer = setTimeout(() => {
+    isHoldTriggered = true;
+    openDesc(path, label);
+  }, HOLD_DURATION);
+}
+
+function clearHold() {
+  if (holdTimer) {
+    clearTimeout(holdTimer);
+    holdTimer = null;
+  }
+}
+
+/* ---------- CORE UI ---------- */
+function refreshItemCache() {
+  const isMenu = !$("menu-view").classList.contains("hidden");
+  cachedContainer = isMenu ? $("nav-list") : $("detail-content");
+  cachedItems = cachedContainer.querySelectorAll('.nav-item, .row, h3');
+}
+
+function updateUI() {
+  if (!cachedItems?.length) { $("pointer-container").style.opacity = "0"; return; }
+  for (let i = 0; i < cachedItems.length; i++) {
+    cachedItems[i].classList.toggle('selected', i === globalIdx);
+  }
+  cachedContainer.scrollTop = viewOffset * 52; 
+  const isNested = $("ui-scaler").classList.contains("nested");
+  const cache = isNested ? nestedCache : menuCache;
+  const p = cache[globalIdx - viewOffset] || cache[0];
+  $("pointer-line").style.transform = p.lineTransform;
+  $("pointer-container").style.transform = p.containerTransform;
+  $("pointer-line").style.transformOrigin = p.lineOrigin;
+  $("pointer-container").style.opacity = "1";
+}
+
+function move(dir) {
+  if (document.activeElement) document.activeElement.blur(); 
+  if ($("desc-modal").style.display === "block") closeDesc();
+  
+  const isMenu = !$("menu-view").classList.contains("hidden");
+  const max = isMenu ? 6 : 5; 
+  let next = globalIdx + dir;
+  if (next >= 0 && next < cachedItems.length) {
+    if (cachedItems[next].tagName === 'H3') next += dir; 
+    if (next < 0 || next >= cachedItems.length) return;
+    globalIdx = next;
+    if (globalIdx < viewOffset) viewOffset = globalIdx;
+    else if (globalIdx >= viewOffset + max) viewOffset = globalIdx - (max - 1);
+    updateUI();
+  }
+}
+
+/* ---------- EVENTS ---------- */
+const onWheel = e => {
+  const now = performance.now();
+  if (now - lastNavTime < 500) {
+    scrollBucket = 0;
+    return;
+  }
+  if (ticking) return;
+  window.requestAnimationFrame(() => {
+    const vel = Math.abs(e.deltaY);
+    if (now - lastEventTime > tuning.idleReset) scrollBucket = 0;
+    if (isLocked || vel < tuning.minVelocity) { 
+      lastEventTime = now; 
+      ticking = false; 
+      return; 
+    }
+    lastEventTime = now;
+    scrollBucket += e.deltaY;
+    if (Math.abs(scrollBucket) >= tuning.sensitivity) {
+      move(scrollBucket > 0 ? 1 : -1);
+      scrollBucket = 0;
+      isLocked = true;
+      setTimeout(() => isLocked = false, vel > 80 ? tuning.lockout * 0.8 : tuning.lockout);
+    }
+    ticking = false;
+  });
+  ticking = true;
+};
+
+/* ---------- UPDATED KEY LOGIC ---------- */
+
+// Track if the enter key is currently being held to prevent repeats
+let enterHoldTimer = null;
+let enterHoldActive = false;
+
+const onKey = e => {
+  const selected = cachedItems[globalIdx];
+  if (!selected) return;
+
+  // Helper to trigger arrow-key interaction on any item
+  const handleArrowNav = (delta) => {
+    const box = selected.querySelector('.value-box');
+    if (box) {
+        const { path, mode } = box.dataset;
+        if (mode && mode !== 'text') {
+            handleStep(path || selected.dataset.path, mode || selected.dataset.mode, delta, selected);
+            return true;
+        }
+    }
+    return false;
+  };
+
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    
+    // Only start the timer if it's not already running (prevent OS key-repeat interference)
+    if (!enterHoldActive) {
+        enterHoldActive = true;
+        clearTimeout(enterHoldTimer);
+        
+        enterHoldTimer = setTimeout(() => {
+            const box = selected.querySelector('.value-box');
+            const path = box?.dataset.path || selected.dataset.path;
+            const label = selected.querySelector('.label')?.innerText || "Setting";
+            
+            if (path) {
+                isHoldTriggered = true; // Flag to prevent the "Click" action on release
+                openDesc(path, label);
+            }
+        }, HOLD_DURATION);
+    }
+    return; // Don't process the "Press" action until keyup
+  }
+
+  const keyMap = {
+    'ArrowUp': () => move(-1),
+    'ArrowDown': () => move(1),
+    'Escape': () => $("desc-modal").style.display === "block" ? closeDesc() : showMenu(),
+    'ArrowRight': () => handleArrowNav(1),
+    'ArrowLeft': () => handleArrowNav(-1)
+  };
+  
+  if (keyMap[e.key]) { 
+    e.preventDefault(); 
+    keyMap[e.key](); 
+  }
+};
+
+// Handle the release of the Enter key
+const onKeyUp = e => {
+  if (e.key === 'Enter') {
+    enterHoldActive = false;
+    clearTimeout(enterHoldTimer);
+
+    // If we didn't trigger the description, perform the normal Enter action
+    if (!isHoldTriggered) {
+        const selected = cachedItems[globalIdx];
+        if (!selected) return;
+
+        if (selected.classList.contains('nav-item')) {
+            selected.click(); 
+        } else if (selected.classList.contains('row')) {
+            const box = selected.querySelector('.value-box');
+            const { path, mode } = box?.dataset || selected.dataset;
+            if (mode === 'toggle' || mode === 'dropdown') {
+                handleStep(path, mode, 1, selected);
+            } else if (mode === 'text') {
+                const input = selected.querySelector('input.mmi-text');
+                input?.focus();
+                input?.select();
+            }
+        }
+    }
+    
+    // Reset the hold flag
+    setTimeout(() => { isHoldTriggered = false; }, 50);
+  }
+};
+
+/* ---------- ATTACH LISTENERS ---------- */
+window.addEventListener('keydown', onKey);
+window.addEventListener('keyup', onKeyUp);
+
+/* ---------- LOGIC ---------- */
+const safeGet = (p, d = null) => p ? p.split(".").reduce((o, k) => (o?.[k] !== undefined) ? o[k] : null, cfg) ?? d : d;
+const setPath = (p, v) => { 
+  const a = p.split("."), l = a.pop(); 
+  let o = a.reduce((obj, k) => (obj[k] = obj[k] || {}, obj[k]), cfg);
+  o[l] = v;
+};
+function formatLabel(k) { return k.split('_').map(w => ACRONYMS.includes(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)).join(' '); }
+
+function trySelect(el) {
+    if ($("desc-modal").style.display === "block") return true; 
+    const idx = Array.from(el.parentElement.querySelectorAll('.nav-item, .row, h3')).indexOf(el);
+    if (idx === -1 || cachedItems[idx]?.tagName === 'H3') return false;
+    if (globalIdx === idx) return true;
+    globalIdx = idx;
+    const isMenu = !$("menu-view").classList.contains("hidden");
+    const max = isMenu ? 6 : 5;
+    if (globalIdx < viewOffset) viewOffset = globalIdx;
+    else if (globalIdx >= viewOffset + max) viewOffset = globalIdx - (max - 1);
+    updateUI();
+    return false;
+}
+
+function handleRowClick(el, path, label) { 
+  if (isHoldTriggered) { isHoldTriggered = false; return; }
+  if ($("desc-modal").style.display === "block") { closeDesc(); return; }
+  
+  trySelect(el); 
+  const box = el.querySelector('.value-box');
+  if (box) {
+    const { mode } = box.dataset;
+    if (mode === 'toggle') handleStep(path, 'toggle', 1, el);
+    else if (mode === 'text') {
+      const input = box.querySelector('input.mmi-text');
+      setTimeout(() => { input?.focus(); input?.select(); }, 10);
+    }
+  }
+}
+
+function handleBoxClick(e, boxEl) {
+  e.stopPropagation(); 
+  if (isHoldTriggered) { isHoldTriggered = false; return; }
+
+  const row = boxEl.closest('.row, .nav-item');
+  trySelect(row); 
+  const { path, mode } = boxEl.dataset;
+  if (mode === 'text') {
+    const input = boxEl.querySelector('input.mmi-text');
+    setTimeout(() => { input?.focus(); input?.select(); }, 10);
+  } else {
+    handleStep(path || row.dataset.path, mode || row.dataset.mode, e.target.classList.contains('left') ? -1 : 1, row);
+  }
+}
+
+function handleStep(path, mode, delta, el) {
+  const current = safeGet(path);
+  if (mode === 'toggle') setPath(path, !current);
+  else if (mode === 'number') {
+    const step = current.toString().includes('.') ? Math.pow(10, -current.toString().split('.')[1].length) : 1;
+    setPath(path, parseFloat((current + delta * step).toFixed(10)));
+  }
+  else if (mode === 'dropdown') {
+    const opts = JSON.parse(el.dataset.options || "[]");
+    setPath(path, opts[(opts.indexOf(current) + delta + opts.length) % opts.length]);
+  }
+  activeSectionId ? renderDetail(activeSectionId) : renderMenu();
+}
+
+function rowItem(label, path, mode, options = []) {
+  const val = safeGet(path);
+  const typeMap = { toggle: 'toggle-box', dropdown: 'cycler-box', number: 'number-box', text: 'text-box' };
+  const icon = 'static/assets/icons/audi/arrow_active.png';
+  let content = "";
+  if (mode === 'toggle') content = `<span>${val ? 'On' : 'Off'}</span>`;
+  else if (mode === 'dropdown') content = `<img src="${icon}" class="asset-arrow down"><span>${val || '...'}</span>`;
+  else if (mode === 'number') content = `<img src="${icon}" class="asset-arrow left"><span>${val ?? '0'}</span><img src="${icon}" class="asset-arrow">`;
+  else if (mode === 'text') content = `<input class="mmi-text" value="${(val ?? "").toString().replace(/"/g, "&quot;")}" onchange="setPath('${path}', this.value)">`;
+  
+  return `<div class="row no-arrow" 
+      data-path="${path}" 
+      data-mode="${mode}" 
+      onclick="handleRowClick(this, '${path}', '${label}')"
+      onmousedown="startHold('${path}', '${label}')"
+      onmouseup="clearHold()"
+      onmouseleave="clearHold()"
+      ontouchstart="startHold('${path}', '${label}')"
+      ontouchend="clearHold()"
+      data-options='${JSON.stringify(options)}'>
+      <div class="label-container"><span class="label">${label}</span></div>
+      <div class="action-indicator"><div class="value-box ${typeMap[mode]}" data-path="${path}" data-mode="${mode}" onclick="handleBoxClick(event, this)">${content}</div></div>
+    </div>`;
+}
+
+function renderMenu() {
+  const eng = safeGet("features.engineering_mode", false);
+  const frag = document.createDocumentFragment();
+  sections.forEach(s => {
+    const togglePath = (s.id === 'power' || s.id === 'carpihat') ? `${s.path}.enabled` : null;
+    if (s.eng && !eng) return; 
+    const navAllowed = !s.gated || eng;
+    const hasArrow = navAllowed && (s.id !== 'main_menu_root_id');
+    const div = document.createElement('div');
+    div.className = `nav-item ${!navAllowed && !togglePath ? 'locked' : ''} ${hasArrow ? 'has-arrow' : 'no-arrow'}`;
+    
+    div.onclick = (e) => {
+        if (isHoldTriggered) { isHoldTriggered = false; return; }
+        trySelect(div);
+        if (togglePath) handleStep(togglePath, 'toggle', 1, div);
+        else if (navAllowed) showDetail(s.id);
+    };
+
+    div.onmousedown = () => startHold(s.path || s.id, s.title);
+    div.onmouseup = clearHold;
+    div.onmouseleave = clearHold;
+    div.ontouchstart = () => startHold(s.path || s.id, s.title);
+    div.ontouchend = clearHold;
+
+    div.innerHTML = `
+        <div class="label-container"><span class="label">${s.title}</span></div>
+        <div class="action-indicator">
+          ${togglePath ? `
+            <div class="value-box toggle-box" data-path="${togglePath}" data-mode="toggle" onclick="handleBoxClick(event, this)">
+                <span>${safeGet(togglePath) ? 'On' : 'Off'}</span>
+            </div>` : ''}
+          ${hasArrow ? `<img src="static/assets/icons/audi/arrow.png" class="arrow-right-img">` : ''}
+        </div>`;
+    frag.appendChild(div);
+  });
+  $("nav-list").innerHTML = ""; 
+  $("nav-list").appendChild(frag);
+  refreshItemCache(); 
+  updateUI();
+}
+
+function mapRecursive(path, obj, skip = [], useTitles = true) {
+  if (!obj || typeof obj !== 'object') return "";
+  return Object.entries(obj).map(([key, val]) => {
+    if (skip.includes(key)) return "";
+    const p = path ? `${path}.${key}` : key;
+    if (val !== null && typeof val === 'object') {
+        if (Array.isArray(val)) return val.map((v, i) => rowItem(formatLabel(`${key}_${i+1}`), `${p}.${i}`, typeof v === 'boolean' ? 'toggle' : 'number')).join("");
+        const subContent = mapRecursive(p, val, [], useTitles);
+        return (useTitles && subContent) ? `<h3>${formatLabel(key)}</h3>` + subContent : subContent;
+    }
+    return rowItem(formatLabel(key), p, typeof val === 'boolean' ? 'toggle' : (typeof val === 'number' ? 'number' : 'text'), getOptionsForKey(key));
+  }).join("");
+}
+
+function renderDetail(id) {
+  const eng = safeGet("features.engineering_mode", false);
+  if (!eng && ['power', 'carpihat', 'thresholds', 'keyMaps', 'canids'].includes(id)) {
+    $("detail-content").innerHTML = "<h3>Access Denied</h3>";
+  } else {
+    const renderers = {
+      main: () => mapRecursive("features", cfg.features, ["dis_mode","car_time_zone","engineering_mode","power_management","carpihat"], false),
+      power: () => mapRecursive("features.power_management", cfg.features?.power_management, ["enabled"], false),
+      carpihat: () => mapRecursive("features.carpihat", cfg.features?.carpihat, ["enabled"], false),
+      thresholds: () => mapRecursive("thresholds", cfg.thresholds, [], true),
+      canids: () => mapRecursive("can_ids", cfg.can_ids, [], true),
+      keyMaps: () => currentSubCategory 
+        ? mapRecursive(KEYMAP_CATEGORIES.find(c => c.id === currentSubCategory).path, safeGet(KEYMAP_CATEGORIES.find(c => c.id === currentSubCategory).path), [], true)
+        : KEYMAP_CATEGORIES.map(c => `<div class="nav-item has-arrow" onclick="if(!isHoldTriggered && trySelect(this)) setSubCat('${c.id}')" onmousedown="startHold('${c.path}', '${c.title}')" onmouseup="clearHold()" ontouchstart="startHold('${c.path}', '${c.title}')" ontouchend="clearHold()"><div class="label-container"><span class="label">${formatLabel(c.title)}</span></div><div class="action-indicator"><img src="static/assets/icons/audi/arrow.png" class="arrow-right-img"></div></div>`).join(""),
+      system: () => ["platform", "can_interface", "features.dis_mode", "features.car_time_zone", "features.engineering_mode"].map(p => {
+          const k = p.split(".").pop();
+          const opts = getOptionsForKey(k);
+          return rowItem(formatLabel(k), p, typeof safeGet(p) === 'boolean' ? 'toggle' : (opts.length ? 'dropdown' : 'text'), opts);
+      }).join("")
+    };
+    const sectionPath = sections.find(s => s.id === id)?.path;
+    $("detail-content").innerHTML = renderers[id]?.() || mapRecursive(sectionPath, safeGet(sectionPath), [], true) || "<h3>No Data</h3>";
+  }
+  refreshItemCache(); updateUI();
+}
+
+/* ---------- NAV ---------- */
+function showDetail(id) {
+  lastNavTime = performance.now();
+  scrollBucket = 0;
+  isLocked = false;
+  activeSectionId = id; 
+  globalIdx = viewOffset = 0; 
+  $("nested-title").innerText = formatLabel(sections.find(s => s.id === id)?.title || "");
+  $("ui-scaler").classList.add("nested");
+  $("menu-view").classList.add("hidden"); 
+  $("detail-view").classList.remove("hidden");
+  $("back-btn").style.display = "block";
+  renderDetail(id);
+}
+
+function showMenu() {
+  closeDesc();
+  lastNavTime = performance.now();
+  scrollBucket = 0;
+  isLocked = false;
+  if (activeSectionId === 'keyMaps' && currentSubCategory) {
+    currentSubCategory = null; 
+    globalIdx = viewOffset = 0; 
+    return renderDetail('keyMaps');
+  }
+  activeSectionId = ""; 
+  globalIdx = viewOffset = 0;
+  $("ui-scaler").classList.remove("nested");
+  $("detail-view").classList.add("hidden"); 
+  $("menu-view").classList.remove("hidden");
+  $("back-btn").style.display = "none";
+  renderMenu();
+}
+
+window.setSubCat = id => { 
+  lastNavTime = performance.now();
+  scrollBucket = 0;
+  isLocked = false;
+  currentSubCategory = id; 
+  globalIdx = viewOffset = 0; 
+  renderDetail('keyMaps'); 
+};
+
+/* ---------- API ---------- */
+async function api(path, method = "GET", body = null) {
+    try {
+        const res = await fetch(path, body ? { method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) } : {});
+        return res.ok ? res.json() : null;
+    } catch(e) { return null; }
+}
+
+async function save() { 
+    closeDesc(); 
+    const btn = $('save-btn'); btn.style.color = "#fff";
+    await api("/api/config", "POST", cfg);
+    setTimeout(() => btn.style.color = "var(--accent)", 200);
+}
+
+async function undoChanges() { 
+    closeDesc(); 
+    const btn = $('cancel-btn'); btn.style.color = "#fff";
+    cfg = await api("/api/config") || cfg; 
+    renderDetail(activeSectionId); 
+    setTimeout(() => btn.style.color = "var(--accent)", 200);
+}
+
+/* ---------- INIT ---------- */
+let resizeTimer;
+function handleResize() { 
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      $("ui-scaler").style.transform = `scale(${Math.min(window.innerWidth / 800, window.innerHeight / 480)})`;
+    }, 100);
+}
+
+async function init() {
+  cfg = await api("/api/config") || { features: { engineering_mode: true } };
+  tzList = await api("/api/timezones") || ["UTC"];
+  descriptors = await api("descriptors.json") || {};
+  $("ui-scaler").style.transform = `scale(${Math.min(window.innerWidth / 800, window.innerHeight / 480)})`;
+  renderMenu();
+}
+
+function getOptionsForKey(key) { 
+    if (key.includes('time_zone')) return tzList;
+    if (key === 'platform') return Object.keys(cfg.platforms || {});
+    return descriptors[key]?.options || [];
+}
+
+function openDesc(path, label) { 
+  if (!path) return; 
+  $("desc-title").innerText = label.toUpperCase(); 
+  $("desc-text").innerText = descriptors[path] || "No description available."; 
+  $("desc-modal").style.display = "block"; 
+}
+
+function closeDesc() { $("desc-modal").style.display = "none"; }
+
+window.addEventListener('resize', handleResize);
+window.addEventListener('wheel', onWheel, { passive: true });
+window.addEventListener('keydown', onKey);
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
