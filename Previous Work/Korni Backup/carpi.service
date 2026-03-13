@@ -1,0 +1,25 @@
+[Unit]
+Description=CarPi Power Management for Raspberry Pi
+After=multi-user.target
+Before=shutdown.target halt.target reboot.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/carpi.py
+
+# Only restart if crash - NOT when intentional CAN sleep or shutdown delay
+Restart=on-failure
+RestartSec=3
+
+User=root
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+# Allow script to cleanly release GPIO latch before shutdown
+ExecStop=/usr/bin/pkill -f carpi.py
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
